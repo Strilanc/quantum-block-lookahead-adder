@@ -26,21 +26,18 @@ namespace CG {
         Message($"expected_sum={expected_sum}");
 
         // Perform carry lookahead addition using quantum operations.
-        using (data = Qubit[register_size*3]) {
+        using (data = Qubit[register_size*2]) {
             // Prepare inputs.
             let qa = LittleEndian(data[...register_size-1]);
-            let qb = LittleEndian(data[register_size..2*register_size-1]);
+            let qb = LittleEndian(data[register_size...]);
             ApplyXorInPlaceL(a, qa);
             ApplyXorInPlaceL(b, qb);
 
-            // Compute and measure sum.
-            let qsum = LittleEndian(data[2*register_size...]);
+            // Compute sum.
+            add_into_using_carry_lookahead(qa, qb);
 
-
-            init_sum_using_carry_lookahead(qa, qb, qsum);
-
-
-            let actual_sum = MeasureLE(qsum);
+            // Check the result.
+            let actual_sum = MeasureLE(qb);
             Message($"  actual_sum={actual_sum}");
             if (actual_sum != expected_sum) {
                 fail "Adder returned the wrong answer!";
@@ -48,8 +45,7 @@ namespace CG {
 
             // Zero registers before deallocating.
             ApplyXorInPlaceL(a, qa);
-            ApplyXorInPlaceL(b, qb);
-            ApplyXorInPlaceL(actual_sum, qsum);
+            ApplyXorInPlaceL(actual_sum, qb);
         }
     }
 }

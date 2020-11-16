@@ -6,6 +6,34 @@ namespace CG {
     open Microsoft.Quantum.Intrinsic;
     open Microsoft.Quantum.Random;
 
+    /// Performs target += input.
+    ///
+    /// Assumes:
+    ///     Length(target) == Length(input)
+    ///
+    /// Budget:
+    ///     Additional Workspace: 4*n + O(1)
+    ///     Reaction Depth: 4*lg(n) + O(1)
+    ///     Toffoli Count: 7*n
+    ///     where n = Length(target)
+    operation add_into_using_carry_lookahead(
+            input: LittleEndian,
+            target: LittleEndian) : Unit is Adj {
+        let n = Length(input!);
+        using (spare = Qubit[n]) {
+            init_sum_using_carry_lookahead(input, target, LittleEndian(spare));
+            for (k in 0..n-1) {
+                SWAP(target![k], spare[k]);
+                X(target![k]);
+                X(spare[k]);
+            }
+            Adjoint init_sum_using_carry_lookahead(input, target, LittleEndian(spare));
+            for (k in 0..n-1) {
+                X(target![k]);
+            }
+        }
+    }
+
     /// Initializes out_c to equal a+b, in logarithmic depth.
     ///
     /// Assumes:
@@ -18,7 +46,7 @@ namespace CG {
     ///     Reaction Depth: 2*lg(n) + O(1)
     ///     Toffoli Count: 4*n
     ///     Toffoli Count (uncomputing): 3*n
-    ///     where n = Length(unit_carries)
+    ///     where n = Length(a)
     operation init_sum_using_carry_lookahead(
             a: LittleEndian,
             b: LittleEndian,
