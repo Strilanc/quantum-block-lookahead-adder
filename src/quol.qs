@@ -51,6 +51,15 @@ namespace CG {
         return r;
     }
 
+    // Returns int(ceil(log_2(n))).
+    function CeilLg2(n: Int) : Int {
+        mutable r = 0;
+        while (LeftShiftedI(1, r) < n) {
+            set r += 1;
+        }
+        return r;
+    }
+
     // Creates a random bit string as a `BigInt`.
     operation DrawRandomBitString(n: Int) : BigInt {
         mutable r = 0L;
@@ -59,15 +68,6 @@ namespace CG {
             if (DrawRandomBool(0.5)) {
                 set r += 1L;
             }
-        }
-        return r;
-    }
-
-    // Returns int(ceil(log_2(n))).
-    function CeilLg2(n: Int) : Int {
-        mutable r = 0;
-        while (LeftShiftedI(1, r) < n) {
-            set r += 1;
         }
         return r;
     }

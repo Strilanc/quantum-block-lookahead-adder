@@ -19,7 +19,10 @@ namespace CG {
     ///     Toffoli Count: 4*n
     ///     Toffoli Count (uncomputing): 3*n
     ///     where n = Length(unit_carries)
-    operation init_add(a: LittleEndian, b: LittleEndian, out_c: LittleEndian) : Unit is Adj {
+    operation init_sum_using_carry_lookahead(
+            a: LittleEndian,
+            b: LittleEndian,
+            out_c: LittleEndian) : Unit is Adj {
         let n = Length(a!);
         using (unit_carries = Qubit[n]) {
             _init_unit_range_data(a!, b!, unit_carries);

@@ -2,16 +2,46 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "build",
+            "label": "build_src",
             "command": "dotnet",
             "type": "process",
             "args": [
                 "build",
-                "${workspaceFolder}/adder.csproj",
+                "${workspaceFolder}/src/adder.csproj",
                 "/property:GenerateFullPaths=true",
                 "/consoleloggerparameters:NoSummary"
             ],
-            "problemMatcher": "$msCompile"
+            "problemMatcher": "$msCompile",
+            "group": "build",
+        },
+        {
+            "label": "build_test",
+            "command": "dotnet",
+            "type": "process",
+            "args": [
+                "build",
+                "${workspaceFolder}/test/tests.csproj",
+                "/property:GenerateFullPaths=true",
+                "/consoleloggerparameters:NoSummary"
+            ],
+            "problemMatcher": "$msCompile",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "run tests",
+            "command": "dotnet",
+            "type": "process",
+            "args": [
+                "test",
+                "${workspaceFolder}/test/tests.csproj",
+            ],
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            }
         },
     ]
 }
