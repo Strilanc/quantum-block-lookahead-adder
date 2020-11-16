@@ -19,27 +19,47 @@ namespace CG {
     ///     Toffoli Count: 4*n
     ///     Toffoli Count (uncomputing): 3*n
     ///     where n = Length(unit_carries)
-    operation init_add(a: LittleEndian, b: LittleEndian, out_c: LittleEndian) : Unit {
+    operation init_add(a: LittleEndian, b: LittleEndian, out_c: LittleEndian) : Unit is Adj {
         let n = Length(a!);
         using (unit_carries = Qubit[n]) {
-            for (k in 0..(n-1)) {
-                init_and(a![k], b![k], unit_carries[k]);
-            }
-            for (k in 0..(n-1)) {
-                CNOT(a![k], b![k]);
-            }
-
+            _init_unit_range_data(a!, b!, unit_carries);
             _init_propagated_carries(unit_carries, b!, out_c!);
+            Adjoint _init_unit_range_data(a!, b!, unit_carries);
 
             for (k in 0..(n-1)) {
+                CNOT(a![k], out_c![k]);
                 CNOT(b![k], out_c![k]);
             }
-            for (k in 0..(n-1)) {
-                CNOT(a![k], b![k]);
-            }
-            for (k in 0..(n-1)) {
-                Adjoint init_and(a![k], b![k], unit_carries[k]);
-            }
+        }
+    }
+
+    /// Initializes the unit length range data for a carry lookahead addition.
+    ///
+    /// Args:
+    ///     a: One of the values being added together.
+    ///     mut_b_to_thresholds: The other value being added. This value will be replaced by
+    ///         the unit length threshold data.
+    ///     out_unit_carries: The location to write the unit length carry data.
+    ///
+    /// Assumes:
+    ///     Length(a) == Length(mut_b_to_thresholds)
+    ///     Length(a) == Length(out_unit_carries)
+    ///     MeasureLE(out_unit_carries) == 0L
+    ///
+    /// Budget:
+    ///     Additional Workspace: O(1)
+    ///     Reaction Depth: O(1)
+    ///     Toffoli Count: n
+    ///     Toffoli Count (uncomputing): 0
+    ///     where n = Length(a)
+    operation _init_unit_range_data(
+            a: Qubit[],
+            mut_b_to_thresholds: Qubit[],
+            out_unit_carries: Qubit[]) : Unit is Adj {
+        let n = Length(a);
+        for (k in 0..(n-1)) {
+            init_and(a[k], mut_b_to_thresholds[k], out_unit_carries[k]);
+            CNOT(a[k], mut_b_to_thresholds[k]);
         }
     }
 
@@ -67,7 +87,7 @@ namespace CG {
     operation _init_propagated_carries(
             unit_carries: Qubit[],
             unit_thresholds: Qubit[],
-            out_propagated_carries: Qubit[]) : Unit {
+            out_propagated_carries: Qubit[]) : Unit is Adj {
         let n = Length(unit_carries);
         using (centered_thresholds = Qubit[n]) {
             using (centered_carries = Qubit[n]) {
