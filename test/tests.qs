@@ -10,48 +10,61 @@
     open Microsoft.Quantum.Random;
 
     @Test("ToffoliSimulator")
-    operation FuzzTestInitAddition() : Unit {
-        FuzzTestInitAdditionLength(0, 1);
-        FuzzTestInitAdditionLength(1, 2);
-        FuzzTestInitAdditionLength(2, 2);
-        FuzzTestInitAdditionLength(3, 2);
-        FuzzTestInitAdditionLength(4, 2);
-        FuzzTestInitAdditionLength(100, 5);
-        FuzzTestInitAdditionLength(127, 5);
-        FuzzTestInitAdditionLength(128, 5);
-        FuzzTestInitAdditionLength(129, 5);
+    operation test_add_into_using_carry_lookahead() : Unit {
+        FuzzTestInPlaceAddition(add_into_using_carry_lookahead);
     }
 
     @Test("ToffoliSimulator")
-    operation FuzzTestInPlaceAddition() : Unit {
-        FuzzTestInPlaceAdditionLength(0, 1);
-        FuzzTestInPlaceAdditionLength(1, 2);
-        FuzzTestInPlaceAdditionLength(2, 2);
-        FuzzTestInPlaceAdditionLength(3, 2);
-        FuzzTestInPlaceAdditionLength(4, 2);
-        FuzzTestInPlaceAdditionLength(100, 5);
-        FuzzTestInPlaceAdditionLength(127, 5);
-        FuzzTestInPlaceAdditionLength(128, 5);
-        FuzzTestInPlaceAdditionLength(129, 5);
+    operation test_init_sum_using_carry_lookahead() : Unit {
+        FuzzTestInitAddition(init_sum_using_carry_lookahead);
     }
 
-    operation FuzzTestInitAdditionLength(n: Int, attempts: Int) : Unit {
+    @Test("ToffoliSimulator")
+    operation test_init_sum_using_ripple_carry() : Unit {
+        FuzzTestInitAddition(init_sum_using_ripple_carry);
+    }
+
+    operation FuzzTestInitAddition(adder: ((LittleEndian, LittleEndian, LittleEndian) => Unit)) : Unit {
+        FuzzTestInitAdditionLength(adder, 0, 1);
+        FuzzTestInitAdditionLength(adder, 1, 2);
+        FuzzTestInitAdditionLength(adder, 2, 2);
+        FuzzTestInitAdditionLength(adder, 3, 2);
+        FuzzTestInitAdditionLength(adder, 4, 2);
+        FuzzTestInitAdditionLength(adder, 100, 5);
+        FuzzTestInitAdditionLength(adder, 127, 5);
+        FuzzTestInitAdditionLength(adder, 128, 5);
+        FuzzTestInitAdditionLength(adder, 129, 5);
+    }
+
+    operation FuzzTestInPlaceAddition(adder: ((LittleEndian, LittleEndian) => Unit)) : Unit {
+        FuzzTestInPlaceAdditionLength(adder, 0, 1);
+        FuzzTestInPlaceAdditionLength(adder, 1, 2);
+        FuzzTestInPlaceAdditionLength(adder, 2, 2);
+        FuzzTestInPlaceAdditionLength(adder, 3, 2);
+        FuzzTestInPlaceAdditionLength(adder, 4, 2);
+        FuzzTestInPlaceAdditionLength(adder, 100, 5);
+        FuzzTestInPlaceAdditionLength(adder, 127, 5);
+        FuzzTestInPlaceAdditionLength(adder, 128, 5);
+        FuzzTestInPlaceAdditionLength(adder, 129, 5);
+    }
+
+    operation FuzzTestInitAdditionLength(adder: ((LittleEndian, LittleEndian, LittleEndian) => Unit), n: Int, attempts: Int) : Unit {
         for (k in 1..attempts) {
             let a = DrawRandomBitString(n);
             let b = DrawRandomBitString(n);
-            CheckInitAdditionCase(n, a, b);
+            CheckInitAdditionCase(adder, n, a, b);
         }
     }
 
-    operation FuzzTestInPlaceAdditionLength(n: Int, attempts: Int) : Unit {
+    operation FuzzTestInPlaceAdditionLength(adder: ((LittleEndian, LittleEndian) => Unit), n: Int, attempts: Int) : Unit {
         for (k in 1..attempts) {
             let a = DrawRandomBitString(n);
             let b = DrawRandomBitString(n);
-            CheckInPlaceAdditionCase(n, a, b);
+            CheckInPlaceAdditionCase(adder, n, a, b);
         }
     }
 
-    operation CheckInitAdditionCase(n: Int, a: BigInt, b: BigInt) : Unit {
+    operation CheckInitAdditionCase(adder: ((LittleEndian, LittleEndian, LittleEndian) => Unit), n: Int, a: BigInt, b: BigInt) : Unit {
         let m = LeftShiftedL(1L, n);
         using (data = Qubit[3*n]) {
             let qa = LittleEndian(data[...n-1]);
@@ -60,7 +73,7 @@
             ApplyXorInPlaceL(b, qb);
 
             let qsum = LittleEndian(data[2*n...]);
-            init_sum_using_carry_lookahead(qa, qb, qsum);
+            adder(qa, qb, qsum);
             let actual = MeasureLE(qsum);
             let expected = (a + b) % m;
             if (actual != expected) {
@@ -73,7 +86,7 @@
         }
     }
 
-    operation CheckInPlaceAdditionCase(n: Int, input: BigInt, target: BigInt) : Unit {
+    operation CheckInPlaceAdditionCase(adder: ((LittleEndian, LittleEndian) => Unit), n: Int, input: BigInt, target: BigInt) : Unit {
         let m = LeftShiftedL(1L, n);
         using (data = Qubit[2*n]) {
             let qinput = LittleEndian(data[...n-1]);
@@ -81,7 +94,7 @@
             ApplyXorInPlaceL(input, qinput);
             ApplyXorInPlaceL(target, qtarget);
 
-            add_into_using_carry_lookahead(qinput, qtarget);
+            adder(qinput, qtarget);
             let actual = MeasureLE(qtarget);
             let expected = (input + target) % m;
             if (actual != expected) {
