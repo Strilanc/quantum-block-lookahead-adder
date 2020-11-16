@@ -26,15 +26,6 @@ namespace CG {
         return result;
     }
 
-    operation Debug(s: String) : Unit is Adj {
-        body(...) {
-            Message(s);
-        }
-        adjoint(...) {
-            Message(s);
-        }
-    }
-
     operation DebugLE(prefix: String, q: LittleEndian) : Unit is Adj {
         body(...) {
             let r = MeasureLE(q);
