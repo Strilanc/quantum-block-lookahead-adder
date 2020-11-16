@@ -17,14 +17,16 @@ namespace CG {
     ///     Toffoli count (uncomputing): 0
     ///     Additional Workspace: 0
     operation init_and(a: Qubit, b: Qubit, target: Qubit) : Unit is Adj {
+        // Uncomment this when using Toffoli simulator.
         CCNOT(a, b, target);
+
+        // Uncomment this when doing resource estimates.
         // body(...) {
         //     CCNOT(a, b, target);
         // }
         // adjoint(...) {
         //     H(target);
-        //     let d = M(target);
-        //     if (d == One) {
+        //     if (M(target) == One) {
         //         CZ(a, b);
         //     }
         // }

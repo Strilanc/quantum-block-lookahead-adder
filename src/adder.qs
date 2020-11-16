@@ -25,44 +25,21 @@ namespace CG {
             out_c: LittleEndian) : Unit is Adj {
         let n = Length(a!);
         using (unit_carries = Qubit[n]) {
-            _init_unit_range_data(a!, b!, unit_carries);
-            _init_propagated_carries(unit_carries, b!, out_c!);
-            Adjoint _init_unit_range_data(a!, b!, unit_carries);
+            within {
+                for (k in 0..(n-1)) {
+                    // Init unit length range carry data.
+                    init_and(a![k], b![k], unit_carries[k]);
+                    // Init unit length range threshold data (into b).
+                    CNOT(a![k], b![k]);
+                }
+            } apply {
+                _init_propagated_carries(unit_carries, b!, out_c!);
+            }
 
             for (k in 0..(n-1)) {
                 CNOT(a![k], out_c![k]);
                 CNOT(b![k], out_c![k]);
             }
-        }
-    }
-
-    /// Initializes the unit length range data for a carry lookahead addition.
-    ///
-    /// Args:
-    ///     a: One of the values being added together.
-    ///     mut_b_to_thresholds: The other value being added. This value will be replaced by
-    ///         the unit length threshold data.
-    ///     out_unit_carries: The location to write the unit length carry data.
-    ///
-    /// Assumes:
-    ///     Length(a) == Length(mut_b_to_thresholds)
-    ///     Length(a) == Length(out_unit_carries)
-    ///     MeasureLE(out_unit_carries) == 0L
-    ///
-    /// Budget:
-    ///     Additional Workspace: O(1)
-    ///     Reaction Depth: O(1)
-    ///     Toffoli Count: n
-    ///     Toffoli Count (uncomputing): 0
-    ///     where n = Length(a)
-    operation _init_unit_range_data(
-            a: Qubit[],
-            mut_b_to_thresholds: Qubit[],
-            out_unit_carries: Qubit[]) : Unit is Adj {
-        let n = Length(a);
-        for (k in 0..(n-1)) {
-            init_and(a[k], mut_b_to_thresholds[k], out_unit_carries[k]);
-            CNOT(a[k], mut_b_to_thresholds[k]);
         }
     }
 
@@ -94,29 +71,26 @@ namespace CG {
         let n = Length(unit_carries);
         using (centered_thresholds = Qubit[n]) {
             using (centered_carries = Qubit[n]) {
-                _init_centered_range_data(
-                    unit_carries,
-                    unit_thresholds,
-                    centered_carries,
-                    centered_thresholds);
-
-                for (t in CeilLg2(n)-1..-1..0) {
-                    let step = LeftShiftedI(1, t);
-                    for (a in 0..step*2..n-step-1) {
-                        let b = a + step;
-                        let c_a2b = _mux(a, b, unit_carries, centered_carries);
-                        let t_a2b = _mux(a, b, unit_thresholds, centered_thresholds);
-                        init_and(t_a2b, out_propagated_carries[a], out_propagated_carries[b]);
-                        CNOT(c_a2b, out_propagated_carries[b]);
+                within {
+                    // Note: the uncomputation of this block can be almost entirely overlapped
+                    // with the apply body. This lowers the reaction depth by ~33%.
+                    _init_centered_range_data(
+                        unit_carries,
+                        unit_thresholds,
+                        centered_carries,
+                        centered_thresholds);
+                } apply {
+                    for (t in CeilLg2(n)-1..-1..0) {
+                        let step = LeftShiftedI(1, t);
+                        for (a in 0..step*2..n-step-1) {
+                            let b = a + step;
+                            let c_a2b = _mux(a, b, unit_carries, centered_carries);
+                            let t_a2b = _mux(a, b, unit_thresholds, centered_thresholds);
+                            init_and(t_a2b, out_propagated_carries[a], out_propagated_carries[b]);
+                            CNOT(c_a2b, out_propagated_carries[b]);
+                        }
                     }
                 }
-
-                // Note: this uncomputation can be almost entirely overlapped with the previous loop.
-                Adjoint _init_centered_range_data(
-                    unit_carries,
-                    unit_thresholds,
-                    centered_carries,
-                    centered_thresholds);
             }
         }
     }
