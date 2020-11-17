@@ -1,0 +1,270 @@
+\documentclass[onecolumn,unpublished]{quantumarticle}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsthm}
+\usepackage{amsfonts}
+\usepackage[caption=false]{subfig}
+\usepackage[colorlinks]{hyperref}
+\usepackage[all]{hypcap}
+\usepackage{tikz}
+\usepackage{relsize}
+\usepackage{color,soul}
+\usepackage[utf8]{inputenc}
+\usepackage{capt-of}
+\usepackage[numbers]{natbib}
+\usetikzlibrary{decorations.pathreplacing}
+
+% Boo Roman Numerals.
+\renewcommand\thesection{\arabic{section}}
+
+% Hyperlinked references to figures, theorems, etc.
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}[section]
+\theoremstyle{definition}
+\newtheorem{theorem}[definition]{Theorem}
+\theoremstyle{definition}
+\newtheorem{lemma}[definition]{Lemma}
+\newcommand{\eq}[1]{\hyperref[eq:#1]{Equation~\ref*{eq:#1}}}
+\renewcommand{\sec}[1]{\hyperref[sec:#1]{Section~\ref*{sec:#1}}}
+\DeclareRobustCommand{\app}[1]{\hyperref[app:#1]{Appendix~\ref*{app:#1}}}
+\newcommand{\fig}[1]{\hyperref[fig:#1]{Figure~\ref*{fig:#1}}}
+\newcommand{\tbl}[1]{\hyperref[tbl:#1]{Table~\ref*{tbl:#1}}}
+\newcommand{\theoremref}[1]{\hyperref[theorem:#1]{Theorem~\ref*{theorem:#1}}}
+\newcommand{\definitionref}[1]{\hyperref[definition:#1]{Definition~\ref*{definition:#1}}}
+
+% Python style for highlighting
+\usepackage{listings}
+\DeclareFixedFont{\ttb}{T1}{txtt}{bx}{n}{12}
+\DeclareFixedFont{\ttm}{T1}{txtt}{m}{n}{12}
+\definecolor{deepblue}{rgb}{0,0,0.5}
+\definecolor{deepred}{rgb}{0.6,0,0}
+\definecolor{deepgreen}{rgb}{0,0.5,0}
+\newcommand\pythonstyle{\lstset{
+language=Python,
+basicstyle=\ttm,
+otherkeywords={self,controlledby,with,quint,let,carryinto,store},
+keywordstyle=\ttb\color{deepblue},
+emph={measure,__init__},
+emphstyle=\ttb\color{deepblue},
+stringstyle=\color{deepgreen},
+showstringspaces=false
+}}
+\lstnewenvironment{python}[1][]
+{\pythonstyle\lstset{#1}}{}
+
+\input{qcircuit}
+
+\title{Low depth quantum adders and waiting for magic states}
+\date{\today}
+\author{Craig Gidney}
+\email{craiggidney@google.com}
+\affiliation{Google Inc., Santa Barbara, California 93117, USA}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+    We analyze how the number of available magic state factories affects the spacetime volume of quantum adders.
+    We present a logarithmic-depth quantum adder, based on the classical Brent-Kung adder, that uses 4N Toffolis to perform an out-of-place addition (vs 5N in previous work) and 7N Toffolis to perform an in-place addition (vs 10N in previous work).
+    We present a $\sqrt{N}$ depth adder that uses $O(\sqrt{N})$ Toffoli factories.
+\end{abstract}
+
+\section{Introduction}
+
+In the classical computing world, low depth adders are ubiquitous.
+Even the original 8-bit Intel 8008 chip had a carry-lookahead adder \cite{shirriff2020reverseengineer8008}.
+In the context of fault tolerant quantum computation, the situation is reversed.
+It's not clear that low depth quantum adders will even be used at all.
+
+In previous work \cite{draper2004lookaheadadder}, in-place carry lookahead adders required five to ten times more Toffolis than ripple-carry adders performing the same task \cite{cuccaro2004adder,gidney2018halving}.
+If we plausibly assume that the control system reaction loop that limits the speed of sequential Toffoli operations will be 15 times faster than the magic state production rate of a single Toffoli factory \cite{gidney2019autoccz}, so that running a ripple carry adder at maximum speed takes 15 factories, we're left with the unfortunate consequence that the lookahead adder's Toffoli overhead means that it cannot possibly be faster until more than 75 magic state factories are present.
+
+In the surface code, non-Clifford operations such as the T gate and the Toffoli gate are not native operations.
+They have to be emulated using roundabout techniques like magic state distillation \cite{bravyi2005magicstate}.
+A single magic state factory producing one magic state every 150 microseconds can cover hundreds of thousands of physical qubits \cite{gidney2019catalyzed} (although new techniques are reducing the cost \cite{litinski2019magicnotcostly}).
+Because of this, Toffoli gates are expected to be tens or hundreds of times more expensive than Clifford gates like the CNOT gate.
+
+This large gap suggests an interesting optimization problem: to reduce the Toffoli overhead of low depth adders enough to make them viable for some interesting parameter regime.
+That is the problem explored by this paper.
+
+\begin{table}
+\centering
+\resizebox{\linewidth}{!}{
+\begin{tabular}{r|c|c|l|l|l|c|c|c|c}
+Paper                                                &Place &Type                   &Toffolis               &Reaction Depth             &Workspace              &u    &V(n=100,f=10) &V(n=1000,f=100) &V(n=10000,f=1000) \\
+\hline
+Draper et al. (2004) \cite{draper2004lookaheadadder} &in    &Carry Lookahead        &$10n - 6\lg n - 13$    &$4\lg n + 7$               &$2n - \lg n - 1$       &1    &17            &180             &1800              \\
+(this paper) (2020)                                  &in    &Carry Lookahead        &$7n$                   &$4\lg n + O(1)$            &$4n + O(1)$            &1    &15            &150             &1500              \\
+(this paper) (2020)                                  &in    &Sqrt Blocks            &$5n + 6\sqrt n + O(1)$ &$6\sqrt n + 4\lg n + O(1)$ &$2n + 5\sqrt n + O(1)$ &1    &11            &97              &930               \\
+(this paper) (2020)                                  &in    &Two Blocks             &$3n$                   &$n + O(1)$                 &$n$                    &0.75 &5             &65              &3300              \\
+Cuccaro (2004) \cite{cuccaro2004adder}               &in    &Ripple Carry           &$2n - 1$               &$2n - 1$                   &$1$                    &1    &3             &63              &4200              \\
+Gidney (2017) \cite{gidney2018halving}                      &in    &Ripple Carry           &$n - 1$                &$2n - 1$                   &$n$                    &0.5  &2             &71              &6100              \\
+
+\hline
+Gossett (1998) \cite{gossett1998carrysave}           &out   &Pipelined (n summands) &$4n$                   &$2$                        &$n^2 - 2n$             &1    &71            &6600            &660000            \\
+Draper et al. (2004) \cite{draper2004lookaheadadder} &out   &Carry Lookahead        &$5n - 3\lg n - 4$      &$2\lg n + 3$               &$n - \lg n$            &1    &8             &91              &920               \\
+(this paper) (2020)                                  &out   &Carry Lookahead        &$4n$                   &$2\lg n + O(1)$            &$3n + O(1)$            &1    &8             &87              &870               \\
+(this paper) (2020)                                  &out   &Sqrt Blocks            &$3n + 3\sqrt n + O(1)$ &$3\sqrt n + 2\lg n + O(1)$ &$2n + 5\sqrt n + O(1)$ &1    &7             &63              &610               \\
+Gidney (2017) \cite{gidney2018halving}                      &out   &Ripple Carry           &$n - 1$                &$n - 1$                    &$1$                    &1    &1             &41              &3100              \\
+(this paper) (2020)                                  &out   &Two Blocks             &$2n$                   &$n + O(1)$                 &$n$                    &0.67 &4             &64              &4200              \\
+\end{tabular}
+}
+    \caption{Comparison of the constructions in this paper with some other adder constructions.
+    Note how ripple carry adders dominate until extremely large problem sizes and factory counts.
+    The value $V(n,f)$ is an estimate in logical qubitseconds of the spacetime volume required to execute an $n$-bit adder using $f$ magic state factories.
+    It is estimated using the formula $\text{Tof}_n \cdot c_{\text{area}} \cdot c_{\text{period}} + \text{Space}_n \cdot \max(D_n \cdot c_{\text{rtt}}, c_{\text{period}} \cdot \text{Tof}_n / (\text{Depth}_n \cdot u))$ where $c_{\text{area}}=72$ is the estimated footprint of a magic state factory, $c_{\text{period}}=165$us is the estimated duration of a magic state factory, $c_{\text{rtt}}=10$us is the estimated round trip reaction time of the classical control system, $u \in [0, 1]$ is a per-adder tweak factor to account for constructions ending with dead time where they consume Toffolis more slowly, $\text{Tof}_n$ is the Toffoli count at $n$, $\text{Depth}_n$ is the reaction depth at $n$, and $\text{Space}_n$ is the workspace at $n$ plus data overhead ($2n$ for inplace adders and $3n$ for out-of-place adders). This table is generated by the ancillary file \texttt{comparison\_table.py}.
+    }
+    \label{tab:comparison}
+\end{table}
+
+We start in [SECTION] by reducing the Toffoli overhead of using a carry lookahead adder from $10N$ to $7N$ for in-place adders and from $5N$ to $4N$ for out-of-place adders.
+Then, in [SECTION], we begin sacrificing parallelism to further lower the Toffoli overhead.
+Instead of operating on every bit in parallel, we split the problem into blocks and operate on the blocks in parallel.
+In particular, when using $\sqrt{N}$ blocks, the Toffoli overhead is reduced to $3N + \sqrt{3N}$ for out-of-place adding and $5n + 6\sqrt{N}$ for in-place adding.
+We then do some rough checking to see in what parameter regime these new adders might use less spacetime volume, compare our results, compare to previous work, and conclude.
+
+\section{Carry Lookahead Adder}
+
+The Brett-Kung adder [CITE] is a classical binary adder circuit.
+It achieves a logarithmic depth with fewer gates than comparable adders such as the Kogge-Stone adder [CITE].
+The original motivating idea for this paper was to attempt to quantize the Brett-Kung adder.
+Ultimately the result is quite similar to the carry lookahead circuit created by Draper et al \cite{draper2004lookaheadadder}.
+
+Probably the key difference between the construction we will present here, and Draper et al's construction, is that we were trying to take advantage of the ability to uncompute an AND using no Toffoli gates \cite{gidney2018halving}.
+We save Toffolis by using more work registers.
+This ends up being a net gain whenever the temporary storage of a work qubit consumes less spacetime volume than producing an additional magic state.
+
+To propagate carries quickly, we will be considering various contiguous bit ranges and computing a ternary value that describes the carry behavior of these ranges.
+Define the integer slicing operation $k[a:b] = \lfloor k/2^a \rfloor \bmod 2^{b-a+1}$.
+Let $x$ and $y$ be the inputs into the addition.
+We define
+
+$$C_a^b = \text{median}(0, 2, x[a:b] + y[a:b] - 2^{b - a + 1} + 1)$$
+
+If $C_a^b = 0$, that means the input bits in the range from $a$ to $b$ will produce a carry out bit that is cleared no matter what carry in bit enters into the range.
+If $C_a^b = 2$, that means the input bits in the range from $a$ to $b$ will produce a carry out bit that is set no matter what carry in bit enters into the range.
+If $C_a^b = 1$, that means the input bits in the range from $a$ to $b$ will produce a carry out bit that is equal to the carry in bit that enters into the range.
+
+Given a bit position, the ternary carry value describing the range from that bit to its successor can be computed like this:
+
+$$\text{unit\_carry}(a) = C_a^{a+1} = (x_a \land y_a) + 2 (x_a \oplus y_a)$$
+
+Note that we have effectively decomposed the ternary carry value into two bits, and that it would take one Toffoli operation to compute this pair of bits.
+
+Ternary carry values whose start and end touch can be fused together, like this:
+
+$$\text{fuse\_carry}(C_a^b, C_b^c) = C_a^c = \begin{cases}
+C_b^c = 1 & \rightarrow C_a^b \\
+C_b^c \neq 1 & \rightarrow C_b^c
+\end{cases}$$
+
+This computation can be performed using two Toffoli operations.
+If only one of the bits of the carry value is needed, that bit can be computed using one Toffoli instead of two.
+
+The purpose of creating and fusing carry values together is to discover whether or not $C_0^k < 2$ for each bit position $k$.
+This is useful because it tells us whether the bit in the sum at position $k$ should agree or disagree with the parity of $x$ and $y$ at position $k$.
+That is to say:
+
+$$(x + y)_k = x_k \oplus y_k \oplus (C_0^k < 2)$$
+
+The main difficulty is in finding a good strategy for fusing carry values, that can perform many fusion steps in parallel but doesn't do too many fusion steps overall.
+This is where the Brett-Kung adder comes in: it specifies a fusing pattern that we follow.
+
+We start by computing all unit length ranges $C_k^{k+1}$ in parallel, and fusing these ranges to produce ranges that cross larger distances.
+Then, we fuse together range pairs of the form $C_{2k}^{2(k+1/2)}, C_{2(k+1/2)}^{2(k+1)}$ in parallel.
+Then, we fuse together range pairs of the form $C_{4k}^{4(k+1/2)}, C_{4(k+1/2)}^{4(k+1)}$ in parallel.
+We continue iteratively in this fashion, fusing ranges of the form $C_{2^s 2k}^{2^s (k+1/2)}, C_{2^s (k+1/2) }^{2^s (k+1)}$ in parallel during round $s$, until $2^s$ is larger than the number of bits in the problem.
+
+Once the process of computing the carry values for long distances ranges has completed, we begin using those values to figure out the carry values for ranges starting at 0.
+Let $p$ be the largest power of two no larger than $n$.
+We happen to already know $C_{0,p}$ from the previous step.
+But we also know $C_{p,p+p/2}$, and we can fuse these two carry values to get $C_{0,p+p/2}$.
+We continue this process in rounds, where in round $s$ we fuse range pairs of the form $C_{0,p/2^s*k}, C_{p/2^s*k,p/2^s*k+p/2^{s+1}}$ and end up knowing all values $C_{o,k}$ where $k$ is a multiple of $p/2^{s+1}$.
+After round $\lg p$ we know all of the carry-from-zero values, and can compute the final sum.
+All that's left to do is to reverse the fusing process to uncompute the intermediate range values.
+
+This process is implemented by the \texttt{init\_sum\_using\_carry\_lookahead} method in the \\\texttt{src/adder\_lookahead.qs} ancillary file.
+
+The method as described has a Toffoli cost of $4n$.
+This can be somewhat easily seen in the Q\# code, because the only Toffoli operations are \texttt{init\_and} operations initializing the contents of four registers each of size $n$.
+The four registers are respectively storing the least significant bits of the carry values for the initial unit length ranges, the $2n$ bits of the carry values created while growing the available ranges, and the $n$ sum-vs-xor parity bits produced while using the grown range carry values to find zero-rooted range carry values.
+
+The reaction depth of the method is $2 \lg n + O(1)$.
+The first $\lg n$ comes from growing the ranges.
+The remaining $\lg n + O(1)$ comes from using the grown ranges to find zero-rooted ranges, and uncomputing the grown range values in parallel with this step (which can be done because they are used in the reverse order of their initialization and they are no longer needed after they are used).
+
+\begin{figure}
+\centering
+\resizebox{0.85\linewidth}{!}{
+\Qcircuit @R=1em @C=0.75em {
+\\
+&{/} \qw& \ustick{n}\qw&\gate{\text{input }a}     &\qw       &\qw       &\gate{\text{input }a}              &\qw       &\qw& & & & & & &{/} \qw& \ustick{n}\qw&\qw&\gate{\text{input }a}&\qw&\\
+&{/} \qw& \ustick{n}\qw&\gate{\text{input }b} \qwx&\qswap    &\gate{X}  &\gate{\text{input }b}          \qwx&\gate{X}  &\qw& & &=& & & &{/} \qw& \ustick{n}\qw&\qw&\gate{\text{+}a}\qwx&\qw&\\
+\lstick{|0\rangle^{\otimes n}}&{/} \qw& \ustick{n}\qw&\gate{\text{init }a+b}\qwx&\qswap\qwx&\gate{X}  &\gate{(\text{init }a+b)^\dagger}\qwx&\qw       &\qw&&&&\lstick{|0\rangle^{\otimes n}}& & & & & & & & \\
+\\
+}
+}
+    \caption{
+        Converting an out-of-place adder into an in-place adder by running the out-of-place adder forwards and then backwards, with a few additional swap and Pauli operations.
+        Swap and Pauli operations can be tracked within the classical control system instead of actually being applied to the qubits.
+    }
+    \label{fig:oop2ip}
+\end{figure}
+
+In order to convert this out-of-place adder into an in-place adder, we use the construction shown in \fig{oop2ip}.
+This runs the out-of-place adder forwards, and then backwards, with no other notable cost.
+Three allocated registers were uncomputed when computing the out-of-place sum.
+When running the out-of-place sum backwards, these registers will be recomputed costing $3n$ Toffolis.
+The missing $n$ Toffolis are because the backwards process is not recomputing the sum-vs-xor parity bits; it is uncomputing them.
+Therefore the resulting in-place adder has a total Toffoli count of $7n$, a doubled reaction depth of $4 \lg n + O(1)$, and the same workspace cost of $3n$.
+
+\section{Blocks}
+
+To give a sense of where we are going, we will start by describing the simplest possible parallel adder: the two-block-adder.
+It divides an $n$-bit addition problem into two $n/2$-bit chunks.
+The two-block-adder performs three ripple carry additions in parallel: adding the low chunks with no carry input, adding the high chunks with no carry input, and adding the high chunks with a set carry input.
+As soon as the low chunk addition produces a carry output, the carry output is used to decide which of the two high chunk addition results to keep.
+
+Here is pseudo-code describing the two block adder:
+
+\begin{python}
+    # Parallel ripple-carry adders.
+    let out_low = a_low + b_low carryinto carry_out
+    let case0 = a_high + b_high
+    let case1 = a_high + b_high + 1
+    # Choose high result using carry_out from low half.
+    let out_high = case0 if carry_out else case1
+    # Uncompute intermediate values in parallel.
+    del carry_out
+    del case1
+    del case0
+\end{python}
+
+The ancillary file \texttt{src/adder\_two\_block.qs} has Q\# code implementing this adder.
+
+We can generalize the 2-block-adder into a $m$-block-adder, or equivalently into an adder with blocks of width $b$.
+The main difference is that instead of having a single carry out value to work with, we will have $m-1$ to work with.
+Fortunately, as part of writing the previous adder we already have a method that can quickly combine local carry values into zero-rooted carry values.
+We simply combine these two pieces together.
+
+To start with, we have a $2n$ Toffoli count overhead due to needing to compute both carry cases for most of the blocks and then a further $n$ Toffolis used to control which case gets written as the result for each block.
+The remaining costs have to do with propagating the carries.
+However, because we only get one carry per block instead of one per bit, these costs are lower than they were in the carry lookahead case.
+Also, we happen to have computed values that can be turned into one of the four registers we needed.
+The result is that we pay $3n/b$ Toffolis where $b$ is the block size.
+Even if we use a low block size of $b = 4$, we are outperforming our per-bit carry lookahead adder.
+We're even using less workspace; the only place we pay is in the depth.
+
+Actually, given how extreme the factory requirement is, it makes sense to pay quite a lot of depth.
+A reasonable Schelling point to set the block size is $\sqrt{n}$, because this is where costs that grow like $b$ start to overtake costs that grow like $n/b$.
+The result is an adder with bla bla bla.
+As we show in table bla, this is the best performing adder at the largest case we estimated.
+
+
+\section{Conclusion}
+
+Adder good.
+
+\bibliographystyle{plain}
+\bibliography{references}
+\end{document}
