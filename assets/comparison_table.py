@@ -20,21 +20,17 @@ class SimpleFormula:
     n2: Union[int, float] = 0
 
     def value(self, n: int, b: int):
-        result = 0
-        result += (
+        return (
             self.n2 * n * n
             + self.n * n
-            + self.sqrt_n * math.sqrt(n)
-            + self.lg_n * math.log2(n)
+            + self.sqrt_n * int(math.ceil(math.sqrt(n)))
+            + self.lg_n * int(math.ceil(math.log2(n)))
             + self.constant
             + (10 if self.O_1 else 0)
+            + self.b * b
+            + self.n_over_b * int(math.ceil(n / b))
+            + self.lg_n_over_b * int(math.ceil(math.log2(max(n / b, 1))))
         )
-        if self.b or self.lg_n_over_b:
-            if b is None:
-                raise ValueError('Need b')
-            result += self.b * b
-            result += self.lg_n_over_b * math.log2(n / b)
-        return result
 
     def latex(self) -> str:
 
@@ -50,12 +46,14 @@ class SimpleFormula:
             terms.append(factor(self.n2) + "n^2")
         if self.n:
             terms.append(factor(self.n) + "n")
+        if self.b:
+            terms.append(factor(self.b) + r"b")
         if self.n_over_b:
             terms.append(factor(self.n_over_b) + r"\frac{n}{b}")
         if self.lg_n_over_b:
-            terms.append(factor(self.n_over_b) + r"\lg \frac{n}{b}")
+            terms.append(factor(self.lg_n_over_b) + r"\lg \frac{n}{b}")
         if self.sqrt_n:
-            terms.append(factor(self.sqrt_n) + r"\sqrt n")
+            terms.append(factor(self.sqrt_n) + r"\sqrt{n}")
         if self.lg_n:
             terms.append(factor(self.lg_n) + r"\lg n")
         if self.O_1:
@@ -97,7 +95,6 @@ class Adder:
             reaction_time=reaction_time)
             for b in range(2, n + 1)
         )
-
 
     def vol_b(self,
             *,
@@ -231,7 +228,7 @@ if __name__ == '__main__':
             author="(this paper)",
             citation=None,
             year=2020,
-            type="b Blocks",
+            type="Blocksize=b",
             in_place=False,
             toffolis=SimpleFormula(n=3, b=-2, n_over_b=5, O_1=True),
             reaction_depth=SimpleFormula(b=3, lg_n_over_b=4, O_1=True),
@@ -241,7 +238,7 @@ if __name__ == '__main__':
             author="(this paper)",
             citation=None,
             year=2020,
-            type="b Blocks",
+            type="Blocksize=b",
             in_place=True,
             toffolis=SimpleFormula(n=5, b=-4, n_over_b=10, O_1=True),
             reaction_depth=SimpleFormula(b=6, lg_n_over_b=8, O_1=True),
@@ -251,7 +248,7 @@ if __name__ == '__main__':
             author="(this paper)",
             citation=None,
             year=2020,
-            type="Two Blocks",
+            type="Blocksize=$n/2$",
             in_place=False,
             toffolis=SimpleFormula(n=2),
             reaction_depth=SimpleFormula(n=1, O_1=True),
@@ -262,7 +259,7 @@ if __name__ == '__main__':
             author="(this paper)",
             citation=None,
             year=2020,
-            type="Two Blocks",
+            type="Blocksize=$n/2$",
             in_place=True,
             toffolis=SimpleFormula(n=3),
             reaction_depth=SimpleFormula(n=1.5, O_1=True),
@@ -293,7 +290,7 @@ if __name__ == '__main__':
             author="(this paper)",
             citation=None,
             year=2020,
-            type="Sqrt Blocks",
+            type="Blocksize=$\sqrt{n}$",
             in_place=True,
             toffolis=SimpleFormula(n=5, sqrt_n=6, O_1=True),
             reaction_depth=SimpleFormula(sqrt_n=6, lg_n=4, O_1=True),
@@ -303,7 +300,7 @@ if __name__ == '__main__':
             author="(this paper)",
             year=2020,
             citation=None,
-            type="Sqrt Blocks",
+            type="Blocksize=$\sqrt{n}$",
             in_place=False,
             toffolis=SimpleFormula(n=3, sqrt_n=3, O_1=True),
             reaction_depth=SimpleFormula(sqrt_n=3, lg_n=2, O_1=True),
