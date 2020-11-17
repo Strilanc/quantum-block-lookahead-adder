@@ -144,7 +144,7 @@ if __name__ == '__main__':
         Adder(
             author="Gidney",
             year=2017,
-            citation="gidney2018",
+            citation="gidney2018halving",
             type="Ripple Carry",
             in_place=False,
             toffolis=SimpleFormula(n=1, constant=-1),
@@ -154,7 +154,7 @@ if __name__ == '__main__':
         Adder(
             author="Gidney",
             year=2017,
-            citation="gidney2018",
+            citation="gidney2018halving",
             type="Ripple Carry",
             in_place=True,
             utilization=0.5,
@@ -210,7 +210,7 @@ if __name__ == '__main__':
             type="Two Blocks",
             in_place=True,
             toffolis=SimpleFormula(n=3),
-            reaction_depth=SimpleFormula(n=1, O_1=True),
+            reaction_depth=SimpleFormula(n=1.5, O_1=True),
             workspace=SimpleFormula(n=1),
             utilization=3/4,
         ),
