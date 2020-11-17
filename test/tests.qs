@@ -20,6 +20,11 @@
     }
 
     @Test("ToffoliSimulator")
+    operation test_init_sum_using_two_block() : Unit {
+        FuzzTestInitAddition(init_sum_using_two_block);
+    }
+
+    @Test("ToffoliSimulator")
     operation test_init_sum_using_ripple_carry() : Unit {
         FuzzTestInitAddition(init_sum_using_ripple_carry);
     }
@@ -77,7 +82,7 @@
             let actual = MeasureLE(qsum);
             let expected = (a + b) % m;
             if (actual != expected) {
-                fail $"Wrong sum. actual {actual} != expected {expected}";
+                fail $"Wrong sum. n={n} a={a}, b={b}, actual={actual}, expected={expected}";
             }
 
             ApplyXorInPlaceL(a, qa);
@@ -98,7 +103,7 @@
             let actual = MeasureLE(qtarget);
             let expected = (input + target) % m;
             if (actual != expected) {
-                fail $"Wrong sum. actual {actual} != expected {expected}";
+                fail $"Wrong sum. n={n} input={input}, target={target}, actual={actual}, expected={expected}";
             }
 
             ApplyXorInPlaceL(input, qinput);

@@ -8,14 +8,17 @@ namespace CG {
 
     /// Initializes out_sum to equal a+b, in linear depth.
     ///
+    /// To set an input carry, adjust the first qubit of `out_sum` before calling.
+    /// To get an output carry, increase the length of `out_sum` by 1.
+    ///
     /// Assumes:
     ///     Length(a) == Length(b)
     ///     Length(a) <= Length(out_sum) <= Length(a) + 1
-    ///     MeasureLE(out_sum) == 0L
+    ///     MeasureLE(out_sum[1...]) == 0L
     ///
     /// Budget:
     ///     Additional Workspace: 0
-    ///     Reaction Depth: n
+    ///     Reaction Depth: 2*n
     ///     Toffoli Count: n
     ///     Toffoli Count (uncomputing): 0
     ///     where n = Length(a)
@@ -31,7 +34,7 @@ namespace CG {
             fail "Length(out_sum!) != Length(a!) and Length(out_sum!) != Length(a!) + 1";
         }
         for (k in 0..Length(out_sum!)-2) {
-            _init_fa(a![k], b![k], out_sum![k], out_sum![k+1]);
+            init_full_adder_step(a![k], b![k], out_sum![k], out_sum![k+1]);
         }
         if (n > 0 and n == Length(out_sum!)) {
             CNOT(a![n - 1], out_sum![n - 1]);
@@ -40,7 +43,7 @@ namespace CG {
     }
 
     // Performs LittleEndian([mut_c_to_out_1, out_2]) := a + b + mut_c_to_out_1
-    operation _init_fa(a: Qubit, b: Qubit, mut_c_to_out_1: Qubit, out_2: Qubit) : Unit is Adj {
+    operation init_full_adder_step(a: Qubit, b: Qubit, mut_c_to_out_1: Qubit, out_2: Qubit) : Unit is Adj {
         CNOT(a, b);
         CNOT(a, mut_c_to_out_1);
         init_and(b, mut_c_to_out_1, out_2);
