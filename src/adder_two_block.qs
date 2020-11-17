@@ -14,10 +14,10 @@ namespace CG {
     ///     MeasureLE(out_sum) == 0L
     ///
     /// Budget:
-    ///     Additional Workspace: n
-    ///     Reaction Depth: n + O(1)
     ///     Toffoli Count: 2*n
     ///     Toffoli Count (uncomputing): n
+    ///     Additional Workspace: n
+    ///     Reaction Depth: n + O(1)
     ///     where n = Length(a)
     operation init_sum_using_two_block(
             a: LittleEndian,

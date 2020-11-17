@@ -12,9 +12,9 @@ namespace CG {
     ///     Length(target) == Length(input)
     ///
     /// Budget:
-    ///     Additional Workspace: 4*n + O(1)
-    ///     Reaction Depth: 4*lg(n) + O(1)
     ///     Toffoli Count: 7*n
+    ///     Reaction Depth: 4*lg(n) + O(1)
+    ///     Additional Workspace: 4*n + O(1)
     ///     where n = Length(target)
     operation add_into_using_carry_lookahead(
             input: LittleEndian,

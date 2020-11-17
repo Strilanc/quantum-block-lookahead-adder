@@ -42,10 +42,10 @@ namespace CG {
     ///     MeasureLE(out_c) == 0L
     ///
     /// Budget:
-    ///     Additional Workspace: 2*n + 5*sqrt(n) + O(1)
-    ///     Reaction Depth: 3*sqrt(n) + 2*lg(n) + O(1)
     ///     Toffoli Count: 3*n + 3*sqrt(n) + O(1)
     ///     Toffoli Count (uncomputing): 2*n + 3*sqrt(n) + O(1)
+    ///     Reaction Depth: 3*sqrt(n) + 2*lg(n) + O(1)
+    ///     Additional Workspace: 2*n + 5*sqrt(n) + O(1)
     ///     where n = Length(a)
     operation init_sum_using_square_root_blocks(
             a: LittleEndian,
