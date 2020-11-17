@@ -17,10 +17,10 @@ namespace CG {
     ///     MeasureLE(out_c) == 0L
     ///
     /// Budget:
-    ///     Additional Workspace: 2*n + 5*n/b + O(1)
-    ///     Reaction Depth: 3*b + 4*lg(n/b) + O(1)
     ///     Toffoli Count: 3*n - 2*b + 5*n/b + O(1)
     ///     Toffoli Count (uncomputing): 2*n - 2*b + 5*n/b + O(1)
+    ///     Reaction Depth: 3*b + 4*lg(n/b) + O(1)
+    ///     Additional Workspace: 2*n + 5*n/b + O(1)
     ///     where n = Length(a), b = block_size
     operation init_sum_using_blocks(
             block_size: Int,

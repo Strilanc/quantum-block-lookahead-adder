@@ -1,0 +1,20 @@
+\begin{tabular}{r|c|c|l|l|l|c|c|c|c}
+Paper                                                &Place &Type                   &Toffolis                    &Reaction Depth             &Workspace                  &u    &V(n=100,f=10) &V(n=1000,f=100) &V(n=10000,f=1000) \\
+\hline
+Draper et al. (2004) \cite{draper2004lookaheadadder} &in    &Carry Lookahead        &$10n - 6\lg n - 13$         &$4\lg n + 7$               &$2n - \lg n - 1$           &1    &17            &180             &1800              \\
+(this paper) (2020)                                  &in    &Carry Lookahead        &$7n$                        &$4\lg n + O(1)$            &$4n + O(1)$                &1    &15            &150             &1500              \\
+(this paper) (2020)                                  &in    &b Blocks               &$5n + 10\frac{n}{b} + O(1)$ &$0\lg \frac{n}{b} + O(1)$  &$2n + 5\frac{n}{b} + O(1)$ &1    &3             &100             &1000              \\
+(this paper) (2020)                                  &in    &Sqrt Blocks            &$5n + 6\sqrt n + O(1)$      &$6\sqrt n + 4\lg n + O(1)$ &$2n + 5\sqrt n + O(1)$     &1    &11            &97              &930               \\
+(this paper) (2020)                                  &in    &Two Blocks             &$3n$                        &$1.5n + O(1)$              &$n$                        &0.75 &5             &80              &4800              \\
+Cuccaro (2004) \cite{cuccaro2004adder}               &in    &Ripple Carry           &$2n - 1$                    &$2n - 1$                   &$1$                        &1    &3             &63              &4200              \\
+Gidney (2017) \cite{gidney2018halving}               &in    &Ripple Carry           &$n - 1$                     &$2n - 1$                   &$n$                        &0.5  &2             &71              &6100              \\
+
+\hline
+Gossett (1998) \cite{gossett1998carrysave}           &out   &Pipelined (n summands) &$4n$                        &$2$                        &$n^2 - 2n$                 &1    &71            &6600            &660000            \\
+Draper et al. (2004) \cite{draper2004lookaheadadder} &out   &Carry Lookahead        &$5n - 3\lg n - 4$           &$2\lg n + 3$               &$n - \lg n$                &1    &8             &91              &920               \\
+(this paper) (2020)                                  &out   &Carry Lookahead        &$4n$                        &$2\lg n + O(1)$            &$3n + O(1)$                &1    &8             &87              &870               \\
+(this paper) (2020)                                  &out   &b Blocks               &$3n + 5\frac{n}{b} + O(1)$  &$0\lg \frac{n}{b} + O(1)$  &$2n + 5\frac{n}{b} + O(1)$ &1    &2             &100             &1000              \\
+(this paper) (2020)                                  &out   &Sqrt Blocks            &$3n + 3\sqrt n + O(1)$      &$3\sqrt n + 2\lg n + O(1)$ &$2n + 5\sqrt n + O(1)$     &1    &7             &63              &610               \\
+Gidney (2017) \cite{gidney2018halving}               &out   &Ripple Carry           &$n - 1$                     &$n - 1$                    &$1$                        &1    &1             &41              &3100              \\
+(this paper) (2020)                                  &out   &Two Blocks             &$2n$                        &$n + O(1)$                 &$n$                        &0.67 &4             &64              &4200              \\
+\end{tabular}

@@ -2,6 +2,7 @@ from typing import Union, List, Optional
 
 import dataclasses
 import math
+import pathlib
 
 import cirq
 
@@ -9,14 +10,18 @@ import cirq
 @dataclasses.dataclass
 class SimpleFormula:
     O_1: bool = False
+    b: int = 0
+    n_over_b: int = 0
+    lg_n_over_b: int = 0
     constant: int = 0
     lg_n: Union[int, float] = 0
     sqrt_n: Union[int, float] = 0
     n: Union[int, float] = 0
     n2: Union[int, float] = 0
 
-    def value(self, n: int):
-        return (
+    def value(self, n: int, b: int):
+        result = 0
+        result += (
             self.n2 * n * n
             + self.n * n
             + self.sqrt_n * math.sqrt(n)
@@ -24,20 +29,31 @@ class SimpleFormula:
             + self.constant
             + (10 if self.O_1 else 0)
         )
+        if self.b or self.lg_n_over_b:
+            if b is None:
+                raise ValueError('Need b')
+            result += self.b * b
+            result += self.lg_n_over_b * math.log2(n / b)
+        return result
 
     def latex(self) -> str:
-        terms = []
-        def factor(x):
+
+        def factor(x: Union[int, float]) -> str:
             if x == 1:
                 return ''
             if x == -1:
                 return '-'
             return str(x)
 
+        terms = []
         if self.n2:
             terms.append(factor(self.n2) + "n^2")
         if self.n:
             terms.append(factor(self.n) + "n")
+        if self.n_over_b:
+            terms.append(factor(self.n_over_b) + r"\frac{n}{b}")
+        if self.lg_n_over_b:
+            terms.append(factor(self.n_over_b) + r"\lg \frac{n}{b}")
         if self.sqrt_n:
             terms.append(factor(self.sqrt_n) + r"\sqrt n")
         if self.lg_n:
@@ -72,9 +88,28 @@ class Adder:
             factory_period: int = 165,
             factory_area: int = 12 * 6,
             reaction_time: int = 10):
-        tof = self.toffolis.value(n)
-        dep = self.reaction_depth.value(n)
-        space = self.workspace.value(n)
+        return min(self.vol_b(
+            n=n,
+            b=b,
+            factory_count=factory_count,
+            factory_period=factory_period,
+            factory_area=factory_area,
+            reaction_time=reaction_time)
+            for b in range(2, n + 1)
+        )
+
+
+    def vol_b(self,
+            *,
+            n: int,
+            b: int,
+            factory_count: int,
+            factory_period: int = 165,
+            factory_area: int = 12 * 6,
+            reaction_time: int = 10):
+        tof = self.toffolis.value(n, b)
+        dep = self.reaction_depth.value(n, b)
+        space = self.workspace.value(n, b)
         if self.in_place:
             space += 2*n
         else:
@@ -92,7 +127,7 @@ class Adder:
 
 
 def make_table(adders: List[Adder]) -> str:
-    adders = sorted(adders, key=lambda adder: (adder.reaction_depth.value(1000000) + adder.year*20, adder.year, adder.author))
+    adders = sorted(adders, key=lambda adder: (adder.reaction_depth.value(1000000, b=20) + adder.year*20, adder.year, adder.author))
     in_place_adders = [adder for adder in adders if adder.in_place]
     out_of_place_adders = [adder for adder in adders if not adder.in_place]
     in_place_row = 2
@@ -130,7 +165,7 @@ def make_table(adders: List[Adder]) -> str:
     return r"\begin{tabular}{r|c|c|l|l|l|c" + '|c' * len(params) + "}\n" + contents + "\n\end{tabular}"
 
 if __name__ == '__main__':
-    print(make_table([
+    result = make_table([
         Adder(
             author="Cuccaro",
             year=2004,
@@ -196,6 +231,26 @@ if __name__ == '__main__':
             author="(this paper)",
             citation=None,
             year=2020,
+            type="b Blocks",
+            in_place=False,
+            toffolis=SimpleFormula(n=3, b=-2, n_over_b=5, O_1=True),
+            reaction_depth=SimpleFormula(b=3, lg_n_over_b=4, O_1=True),
+            workspace=SimpleFormula(n=2, n_over_b=5, O_1=True),
+        ),
+        Adder(
+            author="(this paper)",
+            citation=None,
+            year=2020,
+            type="b Blocks",
+            in_place=True,
+            toffolis=SimpleFormula(n=5, b=-4, n_over_b=10, O_1=True),
+            reaction_depth=SimpleFormula(b=6, lg_n_over_b=8, O_1=True),
+            workspace=SimpleFormula(n=2, n_over_b=5, O_1=True),
+        ),
+        Adder(
+            author="(this paper)",
+            citation=None,
+            year=2020,
             type="Two Blocks",
             in_place=False,
             toffolis=SimpleFormula(n=2),
@@ -254,4 +309,7 @@ if __name__ == '__main__':
             reaction_depth=SimpleFormula(sqrt_n=3, lg_n=2, O_1=True),
             workspace=SimpleFormula(n=2, sqrt_n=5, O_1=True),
         ),
-    ]))
+    ])
+    print(result)
+    with open(pathlib.Path(__file__).parent.parent / 'gen/comparison_table.tex', 'w') as f:
+        print(result, file=f)
