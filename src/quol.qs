@@ -32,9 +32,32 @@ namespace CG {
     // Xors `a` into `target`.
     operation ApplyXorInPlaceL(a: BigInt, target: LittleEndian) : Unit {
         for (k in 0..Length(target!)-1) {
-            if (RightShiftedL(a, k) % 2L == 1L) {
+            if ((a >>> k) % 2L == 1L) {
                 X(target![k]);
             }
+        }
+    }
+
+    /// Initializes out_target := control ? option1 | option0.
+    ///
+    /// Budget:
+    ///     Toffoli count: n
+    ///     Toffoli count (uncomputing):  0
+    ///     Reaction Depth: n (could be lg(n) if control was duplicated)
+    ///     Workspace: 0
+    ///     where n = length(option1)
+    ///
+    /// Assumes:
+    ///     MeasureLE(out_target) == 0
+    ///     Length(out_target) == Length(option0)
+    ///     Length(out_target) == Length(option1)
+    operation init_choose(control: Qubit, option0: Qubit[], option1: Qubit[], out_target: Qubit[]) : Unit is Adj {
+        let n = Length(option0);
+        for (k in 0..n-1) {
+            CNOT(option1[k], option0[k]);
+            init_and(control, option0[k], out_target[k]);
+            CNOT(option1[k], option0[k]);
+            CNOT(option0[k], out_target[k]);
         }
     }
 
@@ -53,7 +76,7 @@ namespace CG {
     // Returns int(ceil(log_2(n))).
     function CeilLg2(n: Int) : Int {
         mutable r = 0;
-        while (LeftShiftedI(1, r) < n) {
+        while (1 <<< r < n) {
             set r += 1;
         }
         return r;

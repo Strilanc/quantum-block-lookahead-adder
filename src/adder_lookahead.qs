@@ -19,19 +19,7 @@ namespace CG {
     operation add_into_using_carry_lookahead(
             input: LittleEndian,
             target: LittleEndian) : Unit is Adj {
-        let n = Length(input!);
-        using (spare = Qubit[n]) {
-            init_sum_using_carry_lookahead(input, target, LittleEndian(spare));
-            for (k in 0..n-1) {
-                SWAP(target![k], spare[k]);
-                X(target![k]);
-                X(spare[k]);
-            }
-            Adjoint init_sum_using_carry_lookahead(input, target, LittleEndian(spare));
-            for (k in 0..n-1) {
-                X(target![k]);
-            }
-        }
+        add_into_using(init_sum_using_carry_lookahead, input, target);
     }
 
     /// Initializes out_c to equal a+b, in logarithmic depth.
@@ -109,7 +97,7 @@ namespace CG {
                         centered_thresholds);
                 } apply {
                     for (t in CeilLg2(n)-1..-1..0) {
-                        let step = LeftShiftedI(1, t);
+                        let step = 1 <<< t;
                         for (a in 0..step*2..n-step-1) {
                             let b = a + step;
                             let c_a2b = _mux(a, b, unit_carries, centered_carries);
@@ -153,7 +141,7 @@ namespace CG {
         let n = Length(unit_thresholds);
         let p = CeilLg2(n);
         for (t in 0..CeilLg2(n)-2) {
-            let step = LeftShiftedI(1, t);
+            let step = 1 <<< t;
             for (a in 0..step * 2..n-step * 2 - 1) {
                 _init_centered_datum_by_fusing(
                     a,

@@ -1,0 +1,94 @@
+namespace CG {
+    open Microsoft.Quantum.Arrays;
+    open Microsoft.Quantum.Arithmetic;
+    open Microsoft.Quantum.Bitwise;
+    open Microsoft.Quantum.Canon;
+    open Microsoft.Quantum.Convert;
+    open Microsoft.Quantum.Intrinsic;
+    open Microsoft.Quantum.Random;
+
+    operation init_sum_using_blocks(
+            block_size: Int,
+            a: LittleEndian,
+            b: LittleEndian,
+            out_c: LittleEndian) : Unit is Adj {
+        if (Length(a!) <= block_size) {
+            init_sum_using_ripple_carry(a, b, out_c);
+        } else {
+            _init_sum_using_blocks_helper(block_size, a, b, out_c);
+        }
+    }
+
+    operation _init_sum_using_blocks_helper(
+            block_size: Int,
+            a: LittleEndian,
+            b: LittleEndian,
+            out_c: LittleEndian) : Unit is Adj {
+        let a_blocks = Chunks(block_size, a!);
+        let b_blocks = Chunks(block_size, b!);
+        let c_blocks = Chunks(block_size, out_c!);
+        let n = Length(a!);
+        let m = Length(a_blocks);
+
+        using ((carries_0, carries_1, propagated_carries, mux_0, mux_1) = (
+                Qubit[m], 
+                Qubit[m], 
+                Qubit[m],
+                Qubit[n - block_size], 
+                Qubit[n - block_size],
+                )) {
+            let mux_blocks_0 = [new Qubit[0]] + Chunks(block_size, mux_0);
+            let mux_blocks_1 = [new Qubit[0]] + Chunks(block_size, mux_1);
+
+            // Only one low block case. Computed in parallel with the high cases.
+            init_sum_using_ripple_carry(
+                LittleEndian(a_blocks[0]),
+                LittleEndian(b_blocks[0]),
+                LittleEndian(c_blocks[0] + [carries_0[0]]));
+            within {
+                // Set carry-in.
+                for (k in 1..Length(mux_blocks_1)-1) {
+                    X(mux_blocks_1[k][0]);
+                }
+
+                // Compute carry-in and not-carry-in cases in parallel.
+                for (k in 1..m-1) {
+                    let stop = k == m - 1 ? -1 | 0;
+                    let m0 = mux_blocks_0[k] + [carries_0[k]][...stop];
+                    let m1 = mux_blocks_1[k] + [carries_1[k]][...stop];
+                    for (t in [m0, m1]) {
+                        init_sum_using_ripple_carry(
+                            LittleEndian(a_blocks[k]),
+                            LittleEndian(b_blocks[k]),
+                            LittleEndian(t));
+                    }
+                }
+                
+                // Convert carries_1 from carry-out-if-carry-in to on-carry-threshold.
+                for (k in 1..m-1) {
+                    CNOT(carries_0[k], carries_1[k]);
+                }
+
+                // Determine propagated carries using carry-lookahead.
+                _init_propagated_carries(carries_0, carries_1, propagated_carries);
+            } apply {
+                for (k in 1..m-1) {
+                    init_choose(
+                        propagated_carries[k], 
+                        mux_blocks_0[k], 
+                        mux_blocks_1[k], 
+                        c_blocks[k]);
+                }
+            }
+
+            // Uncompute c_low_carry.
+            Adjoint init_full_adder_step(
+                a_blocks[0][block_size-1],
+                b_blocks[0][block_size-1],
+                c_blocks[0][block_size-1],
+                carries_0[0]);
+            CNOT(a_blocks[0][block_size-1], c_blocks[0][block_size-1]);
+            CNOT(b_blocks[0][block_size-1], c_blocks[0][block_size-1]);
+        }
+    }
+}

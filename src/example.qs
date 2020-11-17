@@ -18,7 +18,7 @@ namespace CG {
         Message($"           b={b}");
 
         // Sanity checks.
-        let mod = LeftShiftedL(1L, register_size);
+        let mod = 1L <<< register_size;
         if (a >= mod or b >= mod) {
             fail "register_size is too small.";
         }

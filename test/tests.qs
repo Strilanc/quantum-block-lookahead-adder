@@ -25,6 +25,15 @@
     }
 
     @Test("ToffoliSimulator")
+    operation test_init_sum_using_blocks() : Unit {
+        FuzzTestInitAddition(init_sum_using_blocks(1, _, _, _));
+        FuzzTestInitAddition(init_sum_using_blocks(2, _, _, _));
+        FuzzTestInitAddition(init_sum_using_blocks(5, _, _, _));
+        FuzzTestInitAddition(init_sum_using_blocks(10, _, _, _));
+        FuzzTestInitAddition(init_sum_using_blocks(16, _, _, _));
+    }
+
+    @Test("ToffoliSimulator")
     operation test_init_sum_using_ripple_carry() : Unit {
         FuzzTestInitAddition(init_sum_using_ripple_carry);
     }
@@ -70,7 +79,7 @@
     }
 
     operation CheckInitAdditionCase(adder: ((LittleEndian, LittleEndian, LittleEndian) => Unit), n: Int, a: BigInt, b: BigInt) : Unit {
-        let m = LeftShiftedL(1L, n);
+        let m = 1L <<< n;
         using (data = Qubit[3*n]) {
             let qa = LittleEndian(data[...n-1]);
             let qb = LittleEndian(data[n..2*n-1]);
@@ -92,7 +101,7 @@
     }
 
     operation CheckInPlaceAdditionCase(adder: ((LittleEndian, LittleEndian) => Unit), n: Int, input: BigInt, target: BigInt) : Unit {
-        let m = LeftShiftedL(1L, n);
+        let m = 1L <<< n;
         using (data = Qubit[2*n]) {
             let qinput = LittleEndian(data[...n-1]);
             let qtarget = LittleEndian(data[n...]);

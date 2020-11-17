@@ -31,33 +31,24 @@ namespace CG {
         let c_low = LittleEndian(out_c![...h-1]);
         let a_high = LittleEndian(a![h...]);
         let b_high = LittleEndian(b![h...]);
-        let c_high = LittleEndian(out_c![h...]);
+        let c_high = out_c![h...];
 
         using (c_low_carry = Qubit()) {
-            using (tmp = Qubit[h2*2]) {
-                let tmp_high0 = LittleEndian(tmp[...h2 - 1]);
-                let tmp_high1 = LittleEndian(tmp[h2...]);
-                if (h2 > 0) {
-                    X(tmp_high1![0]);
-                }
-
+            using ((case0, case1) = (Qubit[h2], Qubit[h2])) {
                 // Compute the low case and the two high cases in parallel.
                 init_sum_using_ripple_carry(a_low, b_low, LittleEndian(c_low! + [c_low_carry]));
-                init_sum_using_ripple_carry(a_high, b_high, tmp_high0);
-                init_sum_using_ripple_carry(a_high, b_high, tmp_high1);
-
-                // Choose between the two high cases using the carry output of the low case.
-                // In parallel, uncompute the high cases.
-                for (k in h2-1..-1..0) {
-                    CNOT(tmp_high1![k], tmp_high0![k]);
-                    init_and(c_low_carry, tmp_high0![k], c_high![k]);
-                    CNOT(tmp_high1![k], tmp_high0![k]);
-                    CNOT(tmp_high0![k], c_high![k]);
+                within {
+                    if (h2 > 0) {
+                        X(case1[0]);
+                    }
+                    init_sum_using_ripple_carry(a_high, b_high, LittleEndian(case0));
+                    init_sum_using_ripple_carry(a_high, b_high, LittleEndian(case1));
+                } apply {
+                    // Pick high half output based on carry-out from low half.
+                    init_choose(c_low_carry, case0, case1, c_high);
                 }
-                Adjoint init_sum_using_ripple_carry(a_high, b_high, tmp_high0);
-                Adjoint init_sum_using_ripple_carry(a_high, b_high, tmp_high1);
 
-                // Uncompute c_low_carry.
+                // Uncompute carry-out from low half.
                 if (h > 0) {
                     Adjoint init_full_adder_step(
                         a_low![h-1],
@@ -66,9 +57,6 @@ namespace CG {
                         c_low_carry);
                     CNOT(a_low![h-1], c_low![h-1]);
                     CNOT(b_low![h-1], c_low![h-1]);
-                }
-                if (h2 > 0) {
-                    X(tmp_high1![0]);
                 }
             }
         }
