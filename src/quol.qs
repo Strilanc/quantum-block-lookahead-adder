@@ -4,6 +4,7 @@ namespace CG {
     open Microsoft.Quantum.Canon;
     open Microsoft.Quantum.Convert;
     open Microsoft.Quantum.Intrinsic;
+    open Microsoft.Quantum.Math;
     open Microsoft.Quantum.Random;
 
     /// Initializes `target` to equal `a & b`.
@@ -80,6 +81,11 @@ namespace CG {
             set r += 1;
         }
         return r;
+    }
+
+    // Returns int(ceil(sqrt(n))).
+    function CeilSqrt(n: Int) : Int {
+        return Ceiling(Sqrt(IntAsDouble(n)));
     }
 
     // Creates a random bit string as a `BigInt`.

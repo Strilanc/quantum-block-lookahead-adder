@@ -38,6 +38,11 @@
         FuzzTestInitAddition(init_sum_using_ripple_carry);
     }
 
+    @Test("ToffoliSimulator")
+    operation test_init_sum_using_square_root_blocks() : Unit {
+        FuzzTestInitAddition(init_sum_using_square_root_blocks);
+    }
+
     operation FuzzTestInitAddition(adder: ((LittleEndian, LittleEndian, LittleEndian) => Unit)) : Unit {
         FuzzTestInitAdditionLength(adder, 0, 1);
         FuzzTestInitAdditionLength(adder, 1, 2);

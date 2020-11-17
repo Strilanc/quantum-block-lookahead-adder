@@ -5,8 +5,23 @@ namespace CG {
     open Microsoft.Quantum.Canon;
     open Microsoft.Quantum.Convert;
     open Microsoft.Quantum.Intrinsic;
+    open Microsoft.Quantum.Math;
     open Microsoft.Quantum.Random;
 
+    /// Initializes out_c to equal a+b, in blocksize + log(n/block_size) depth.
+    ///
+    /// Assumes:
+    ///     blocksize > 0 or Length(a) == 0
+    ///     Length(a) == Length(b)
+    ///     Length(a) == Length(out_c)
+    ///     MeasureLE(out_c) == 0L
+    ///
+    /// Budget:
+    ///     Additional Workspace: 2*n + 5*n/b + O(1)
+    ///     Reaction Depth: 3*b + 4*lg(n/b) + O(1)
+    ///     Toffoli Count: 3*n - 2*b + 5*n/b + O(1)
+    ///     Toffoli Count (uncomputing): 2*n - 2*b + 5*n/b + O(1)
+    ///     where n = Length(a), b = block_size
     operation init_sum_using_blocks(
             block_size: Int,
             a: LittleEndian,
@@ -17,6 +32,27 @@ namespace CG {
         } else {
             _init_sum_using_blocks_helper(block_size, a, b, out_c);
         }
+    }
+
+    /// Initializes out_c to equal a+b, in blocksize + log(n/block_size) depth.
+    ///
+    /// Assumes:
+    ///     Length(a) == Length(b)
+    ///     Length(a) == Length(out_c)
+    ///     MeasureLE(out_c) == 0L
+    ///
+    /// Budget:
+    ///     Additional Workspace: 2*n + 5*sqrt(n) + O(1)
+    ///     Reaction Depth: 3*sqrt(n) + 2*lg(n) + O(1)
+    ///     Toffoli Count: 3*n + 3*sqrt(n) + O(1)
+    ///     Toffoli Count (uncomputing): 2*n + 3*sqrt(n) + O(1)
+    ///     where n = Length(a)
+    operation init_sum_using_square_root_blocks(
+            a: LittleEndian,
+            b: LittleEndian,
+            out_c: LittleEndian) : Unit is Adj {
+        let block_size = CeilSqrt(Length(a!));
+        init_sum_using_blocks(block_size, a, b, out_c);
     }
 
     operation _init_sum_using_blocks_helper(
@@ -35,8 +71,7 @@ namespace CG {
                 Qubit[m], 
                 Qubit[m],
                 Qubit[n - block_size], 
-                Qubit[n - block_size],
-                )) {
+                Qubit[n - block_size])) {
             let mux_blocks_0 = [new Qubit[0]] + Chunks(block_size, mux_0);
             let mux_blocks_1 = [new Qubit[0]] + Chunks(block_size, mux_1);
 
