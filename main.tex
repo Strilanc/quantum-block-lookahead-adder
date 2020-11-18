@@ -64,29 +64,30 @@ showstringspaces=false
 \maketitle
 
 \begin{abstract}
-    We improve the cost of low depth quantum adders, and analyze how their spacetime reacts to having a limited number of magic state factories.
-    We improve the Toffoli cost of out-of-place carry lookahead adders from $5N$ to $4N$ or to $3N + $, that uses 4N Toffolis to perform an out-of-place addition (vs 5N in previous work) and 7N Toffolis to perform an in-place addition (vs 10N in previous work).
-    We show that ripple-carry adders have the lowest volume up to XXX bits
-    We present a $\sqrt{N}$ depth adder that uses $O(\sqrt{N})$ Toffoli factories.
+    We improve the Toffoli count of low depth quantum adders, and analyze how their spacetime cost reacts to having a limited number of magic state factories.
+    We present an out-of-place carry lookahead adder with a Toffoli count of $4n$ (vs $5n$ in previous work by Draper et al) and a corresponding in-place Toffoli count of $7n$ (vs $10n$ in previous work by Draper et al).
+    We also consider parallelizing over larger blocks of bits of size $b$, which reduces the Toffoli count to $3n + 5n/b$ out-of-place and $5n + 5n/b$ in-place at the cost of the reaction depth depending linearly on $b$.
+    We estimate the spacetime volume of these adders, and adders from previous work, for various register sizes and factory counts under plausible assumptions for a large scale quantum computer based on the surface code and superconducting qubits.
 \end{abstract}
 
 \section{Introduction}
 
 In the classical computing world, low depth adders are ubiquitous.
 Even the original 8-bit Intel 8008 chip had a carry-lookahead adder \cite{shirriff2020reverseengineer8008}.
-In the context of fault tolerant quantum computation, the situation is reversed.
-It's not clear that low depth quantum adders will even be used at all.
-
-In previous work \cite{draper2004lookaheadadder}, in-place carry lookahead adders required five to ten times more Toffolis than ripple-carry adders performing the same task \cite{cuccaro2004adder,gidney2018halving}.
-If we plausibly assume that the control system reaction loop that limits the speed of sequential Toffoli operations will be 15 times faster than the magic state production rate of a single Toffoli factory \cite{gidney2019autoccz}, so that running a ripple carry adder at maximum speed takes 15 factories, we're left with the unfortunate consequence that the lookahead adder's Toffoli overhead means that it cannot possibly be faster until more than 75 magic state factories are present.
+In the context of fault tolerant quantum computation, it's not clear if low depth adders will enjoy the same popularity.
+The problem is that low depth adders appear to require five to ten times as many Toffolis as ripple carry adders \cite{draper2004lookaheadadder,cuccaro2004adder,gidney2018halving} and they need to apply these operations at a much faster rate, implying a huge space overhead due to the need for many, many magic state factories.
 
 In the surface code, non-Clifford operations such as the T gate and the Toffoli gate are not native operations.
 They have to be emulated using roundabout techniques like magic state distillation \cite{bravyi2005magicstate}.
-A single magic state factory producing one magic state every 150 microseconds can cover hundreds of thousands of physical qubits \cite{gidney2019catalyzed} (although new techniques are reducing the cost \cite{litinski2019magicnotcostly}).
-Because of this, Toffoli gates are expected to be tens or hundreds of times more expensive than Clifford gates like the CNOT gate.
+Magic state factories are expected to be expensive.
+For example in \cite{gidney2019catalyzed} a factory covers hundreds of thousands of physical qubits and produces a magic state every 165 microseconds (although new techniques are reducing the cost \cite{litinski2019magicnotcostly}).
+If a quantum computer isn't large enough to hold many magic state factories, running a low depth adder is pointless because the adder will simply bottleneck waiting for magic states.
 
-This large gap suggests an interesting optimization problem: to reduce the Toffoli overhead of low depth adders enough to make them viable for some interesting parameter regime.
-That is the problem explored by this paper.
+Suppose we have a quantum computer with a control system reaction time of 10 microseconds and factories that each produce a state every 165 microseconds as in \cite{gidney2019autoccz}.
+Using a ripple-carry adder and reaction limited quantum computation \cite{fowler2012timeoptimal,gidney2019autoccz}, you would need 17 magic state factories before the ripple carry process was running at top speed.
+If a carry lookahead adder requires five times more Toffolis, this implies you need at least $17 \cdot 5 = 85$ magic state factories before the carry lookahead adder can possibly outpace the ripple carry adder.
+In other words, it looks like you have to dedicate tens of millions of physical qubits to magic state distillation before the carry lookahead adder even has a chance at being better.
+For comparison, recent estimates of the cost of quantum chemistry computations involving FeMoCo covered only four million physical qubits \cite{lee2020hypercontractionchemistry}.
 
 \begin{table}
 \centering
@@ -101,11 +102,13 @@ That is the problem explored by this paper.
     \label{tab:comparison}
 \end{table}
 
-We start in [SECTION] by reducing the Toffoli overhead of using a carry lookahead adder from $10N$ to $7N$ for in-place adders and from $5N$ to $4N$ for out-of-place adders.
+Hopefully the trouble with choosing to use a low depth adder is now clear to the reader.
+Our goal in this paper is to reduce that amount of trouble, by optimizing the cost of these adders.
+We start in [SECTION] by quantizing the classical Brett-Kung adder [CITE] and using temporary logical-ANDs \cite{gidney2018halving}, resulting in a carry lookahead adder with lower Toffoli counts than in previous work.
 Then, in [SECTION], we begin sacrificing parallelism to further lower the Toffoli overhead.
 Instead of operating on every bit in parallel, we split the problem into blocks and operate on the blocks in parallel.
-In particular, when using $\sqrt{N}$ blocks, the Toffoli overhead is reduced to $3N + \sqrt{3N}$ for out-of-place adding and $5n + 6\sqrt{N}$ for in-place adding.
-We then do some rough checking to see in what parameter regime these new adders might use less spacetime volume, compare our results, compare to previous work, and conclude.
+Finally, in [SECTION], we estimate the spacetime volume of our adders and previous adders in order to understand the parameter regimes in which various adders dominate.
+Finally, in [SECTION], we summarize our results and give some additional caveats.
 
 \section{Carry Lookahead Adder}
 
@@ -202,7 +205,7 @@ When running the out-of-place sum backwards, these registers will be recomputed 
 The missing $n$ Toffolis are because the backwards process is not recomputing the sum-vs-xor parity bits; it is uncomputing them.
 Therefore the resulting in-place adder has a total Toffoli count of $7n$, a doubled reaction depth of $4 \lg n + O(1)$, and the same workspace cost of $3n$.
 
-\section{Blocks}
+\section{Block Lookahead Adder}
 
 To give a sense of where we are going, we will start by describing the simplest possible parallel adder: the two-block-adder.
 It divides an $n$-bit addition problem into two $n/2$-bit chunks.
@@ -243,6 +246,8 @@ Actually, given how extreme the factory requirement is, it makes sense to pay qu
 A reasonable Schelling point to set the block size is $\sqrt{n}$, because this is where costs that grow like $b$ start to overtake costs that grow like $n/b$.
 The result is an adder with bla bla bla.
 As we show in table bla, this is the best performing adder at the largest case we estimated.
+
+\section{Comparison}
 
 
 \section{Conclusion}
