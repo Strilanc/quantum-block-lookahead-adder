@@ -1,4 +1,4 @@
-from typing import Union, List, Optional
+from typing import Callable, Union, List, Optional
 
 import dataclasses
 import math
@@ -13,7 +13,7 @@ class SimpleFormula:
     b: int = 0
     n_over_b: int = 0
     lg_n_over_b: int = 0
-    constant: int = 0
+    constant: float = 0
     lg_n: Union[int, float] = 0
     sqrt_n: Union[int, float] = 0
     n: Union[int, float] = 0
@@ -67,6 +67,82 @@ class SimpleFormula:
         return result
 
 
+class Tot:
+    def __init__(self, heights: Callable[[int], List[float]]):
+        self.heights = heights
+
+    @staticmethod
+    def sequence(*items: 'Tot') -> 'Tot':
+        result = items[0]
+        for item in items[1:]:
+            result = result.then(item)
+        return result
+
+    def __mul__(self, other: int) -> 'Tot':
+        return Tot(lambda n: [e * other for e in self.heights(n)])
+
+    def reversed(self):
+        return Tot(lambda n: self.heights(n)[::-1])
+
+    def then(self, second: 'Tot', shift: int = 0) -> 'Tot':
+        def f(n: int) -> List[float]:
+            a = self.heights(n)
+            b = second.heights(n)
+            result = list(a)
+            for k in range(len(b)):
+                i = len(a) + k + shift
+                while len(result) <= i:
+                    result.append(0)
+                result[i] += b[k]
+            return result
+        return Tot(f)
+
+    def tikz_plot(self, n: int) -> str:
+        return tikz_plot(self.heights(n))
+
+    def overlap(self, second: 'Tot', shift: int = 0):
+        def f(n: int) -> List[int]:
+            a = self.heights(n)
+            b = second.heights(n)
+            result = list(a)
+            for k in range(len(b)):
+                i = k + shift
+                while len(result) <= i:
+                    result.append(0)
+                result[i] += b[k]
+            return result
+        return Tot(f)
+
+
+def fold_down(*, scale: float = 1, skip_start: int = 0, skip_end: int = 0, blocks: bool = False, sqrt: bool = False) -> Tot:
+    def f(n: int) -> List[float]:
+        result = []
+        k = n
+        if blocks:
+            k = int(math.ceil(n / DEFAULT_B))
+        if sqrt:
+            k = int(math.ceil(math.sqrt(n)))
+        for _ in range(skip_start):
+            k >>= 1
+        while k > 2**skip_end:
+            result.append(k * scale)
+            k >>= 1
+        return result
+    return Tot(f)
+
+
+def hold(*, duration: Union[int, float, SimpleFormula], height: Union[int, float, SimpleFormula] = 1) -> Tot:
+    if isinstance(duration, (int, float)):
+        duration = SimpleFormula(constant=duration)
+    if isinstance(height, (int, float)):
+        height = SimpleFormula(constant=height)
+    return Tot(lambda n: [height.value(n, DEFAULT_B)] * int(math.ceil(duration.value(n, DEFAULT_B))))
+
+
+DEFAULT_N = 128
+DEFAULT_B = 10
+
+
 @dataclasses.dataclass
 class Adder:
     author: str
@@ -77,7 +153,17 @@ class Adder:
     toffolis: SimpleFormula
     reaction_depth: SimpleFormula
     workspace: SimpleFormula
+    toffoli_usage: Optional[Tot] = None
     utilization: float = 1.0
+
+    def toffoli_usage_tikz_plot(self) -> str:
+        if self.toffoli_usage is None:
+            t = self.reaction_depth.value(DEFAULT_N, DEFAULT_B)
+            v = self.toffolis.value(DEFAULT_N, DEFAULT_B)
+            r = hold(duration=t, height=v / t)
+        else:
+            r = self.toffoli_usage
+        return r.tikz_plot(DEFAULT_N)
 
     def vol(self,
             *,
@@ -123,6 +209,30 @@ class Adder:
         return result
 
 
+def tikz_plot(heights: List[float]):
+    def fy(v):
+        if v == 0:
+            return 0
+        return 1 + int(math.ceil(math.log2(v)))
+
+    start = r"\begin{tikzpicture}\fill[red] "
+    points = [(0, -0.00001)]
+    prev_y = 0
+    for x, y in enumerate(heights):
+        if y != prev_y:
+            points.append((x, fy(prev_y)))
+            points.append((x, fy(y)))
+            prev_y = y
+    points.append((len(heights), fy(prev_y)))
+    points.append((len(heights), -0.00001))
+    x_scale = 256  # max(e[0] for e in points)
+    max_x = max(e[0] for e in points) / x_scale
+    y_scale = 16  # max(e[1] for e in points)
+    center = " -- ".join(f"({x / x_scale * 5},{y / y_scale})" for x, y in points)
+    end = fr" -- cycle;\draw (0,0.5) -- (0,0) -- ({max_x * 5},0) -- ({max_x * 5},0.5); \end{{tikzpicture}}"
+    return start + center + end
+
+
 def make_table(adders: List[Adder]) -> str:
     adders = sorted(adders, key=lambda adder: (adder.reaction_depth.value(1000000, b=20) + adder.year*20, adder.year, adder.author))
     in_place_adders = [adder for adder in adders if adder.in_place]
@@ -133,6 +243,7 @@ def make_table(adders: List[Adder]) -> str:
     diagram.write(0, in_place_row - 1, r"\hline")
     diagram.write(0, out_of_place_row - 1, r"\hline")
     params = [(100, 10), (1000, 100), (10000, 1000)]
+    params = []
     vol_col = 7
     last_col = vol_col + len(params)
 
@@ -142,7 +253,7 @@ def make_table(adders: List[Adder]) -> str:
     diagram.write(3, 0, "&Toffolis")
     diagram.write(4, 0, "&Reaction Depth")
     diagram.write(5, 0, "&Workspace")
-    diagram.write(6, 0, "&u")
+    diagram.write(6, 0, f"&Log Toffoli / Time (n={DEFAULT_N},b={DEFAULT_B})")
     diagram.write(last_col, 0, '\\\\')
     for c, (n, f) in enumerate(params):
         diagram.write(vol_col + c, 0, f"&V(n={n},f={f})")
@@ -154,15 +265,197 @@ def make_table(adders: List[Adder]) -> str:
             diagram.write(3, row + r, '&' + adder.toffolis.latex())
             diagram.write(4, row + r, '&' + adder.reaction_depth.latex())
             diagram.write(5, row + r, '&' + adder.workspace.latex())
-            diagram.write(6, row + r, f'&{adder.utilization:.2}' if adder.utilization != 1 else '&1')
+            diagram.write(6, row + r, '&' + adder.toffoli_usage_tikz_plot())
             for c, (n, f) in enumerate(params):
                 diagram.write(vol_col + c, row + r, '&' + adder.vol(n=n, factory_count=f))
             diagram.write(last_col, row + r, '\\\\')
     contents = diagram.render(horizontal_spacing=1, vertical_spacing=0)
-    return r"\begin{tabular}{r|c|c|l|l|l|c" + '|c' * len(params) + "}\n" + contents + "\n\end{tabular}"
+    return r"\begin{tabular}{r|c|c|l|l|l|l" + '|c' * len(params) + "}\n" + contents + "\n\end{tabular}"
 
-if __name__ == '__main__':
-    result = make_table([
+
+def main():
+    draper_lookahead_usage = Tot.sequence(
+        # Prepare initial carries.
+        hold(duration=1, height=SimpleFormula(n=1)),
+        # P round.
+        fold_down(skip_start=1).overlap(
+            # G round.
+            fold_down(skip_start=1),
+            shift=1,
+        ),
+        # C round.
+        fold_down(skip_start=1).reversed().overlap(
+            # P^-1 round.
+            fold_down(skip_start=1).reversed(),
+            shift=1,
+        ),
+    )
+    our_lookahead_usage = Tot.sequence(
+        # Initial carries.
+        hold(height=SimpleFormula(n=1), duration=1),
+        # Grow centered ranges.
+        fold_down(scale=2, skip_start=1),
+        # Spread zero-rooted ranges.
+        fold_down(skip_start=1).reversed().overlap(
+            # Uncompute centered ranges.
+            fold_down(scale=0, skip_start=1).reversed(),
+            shift=1,
+        ),
+    )
+    our_lookahead_usage_uncompute = Tot.sequence(
+        # Initial carries.
+        hold(height=SimpleFormula(n=1), duration=1),
+        # Grow centered ranges.
+        fold_down(scale=0, skip_start=1),
+        # Spread zero-rooted ranges. (0 cost when uncomputing)
+        fold_down(scale=0, skip_start=1).reversed(),
+        # Spread zero-rooted ranges.
+        fold_down(skip_start=1).reversed().overlap(
+            # Uncompute centered ranges.
+            fold_down(scale=2, skip_start=1).reversed(),
+            shift=1,
+        ),
+    ).reversed()
+    our_lookahead_usage_block_spread = Tot.sequence(
+        # Grow centered ranges.
+        fold_down(scale=2, skip_start=1, blocks=True),
+        # Spread zero-rooted ranges.
+        fold_down(skip_start=1, blocks=True).reversed().overlap(
+            # Uncompute centered ranges.
+            fold_down(scale=0, skip_start=1, blocks=True).reversed(),
+            shift=1
+        ),
+    )
+    our_lookahead_usage_block_spread_uncompute = Tot.sequence(
+        # Grow centered ranges.
+        fold_down(scale=0, skip_start=1, blocks=True),
+        # Spread zero-rooted ranges. (0 cost when uncomputing)
+        fold_down(scale=0, skip_start=1, blocks=True).reversed().overlap(
+            # Uncompute centered ranges.
+            fold_down(scale=2, skip_start=1, blocks=True).reversed(),
+            shift=1
+        ),
+    )
+    our_block_usage = Tot.sequence(
+        # initial ripple carry adders.
+        hold(
+            duration=SimpleFormula(b=1),
+            height=SimpleFormula(n_over_b=2, constant=-1)),
+        # Carry lookahead within blocks
+        our_lookahead_usage_block_spread,
+        # Choose result.
+        hold(
+            duration=SimpleFormula(b=1),
+            height=SimpleFormula(n_over_b=1, constant=-1)),
+        # Undo carry lookahead.
+        our_lookahead_usage_block_spread_uncompute,
+        # Undo initial ripple carry adders.
+        hold(
+            duration=SimpleFormula(b=1),
+            height=0),
+    )
+    our_block_usage_uncompute = Tot.sequence(
+        # initial ripple carry adders.
+        hold(
+            duration=SimpleFormula(b=1),
+            height=SimpleFormula(n_over_b=2, constant=-1)),
+        # Carry lookahead within blocks
+        our_lookahead_usage_block_spread,
+        # Choose result.
+        hold(
+            duration=SimpleFormula(b=1),
+            height=0),
+        # Undo carry lookahead.
+        our_lookahead_usage_block_spread_uncompute,
+        # Undo initial ripple carry adders.
+        hold(
+            duration=SimpleFormula(b=1),
+            height=0),
+    )
+
+    our_lookahead_usage_sqrt_spread = Tot.sequence(
+        # Grow centered ranges.
+        fold_down(scale=2, skip_start=1, sqrt=True),
+        # Spread zero-rooted ranges.
+        fold_down(skip_start=1, sqrt=True).reversed().overlap(
+            # Uncompute centered ranges.
+            fold_down(scale=0, skip_start=1, sqrt=True).reversed(),
+            shift=1
+        ),
+    )
+    our_lookahead_usage_sqrt_spread_uncompute = Tot.sequence(
+        # Grow centered ranges.
+        fold_down(scale=0, skip_start=1, sqrt=True),
+        # Spread zero-rooted ranges. (0 cost when uncomputing)
+        fold_down(scale=0, skip_start=1, sqrt=True).reversed().overlap(
+            # Uncompute centered ranges.
+            fold_down(scale=2, skip_start=1, sqrt=True).reversed(),
+            shift=1
+        ),
+    )
+    our_sqrt_usage = Tot.sequence(
+        # initial ripple carry adders.
+        hold(
+            duration=SimpleFormula(sqrt_n=1),
+            height=SimpleFormula(sqrt_n=2, constant=-1)),
+        # Carry lookahead within blocks
+        our_lookahead_usage_sqrt_spread,
+        # Choose result.
+        hold(
+            duration=SimpleFormula(sqrt_n=1),
+            height=SimpleFormula(sqrt_n=1, constant=-1)),
+        # Undo carry lookahead.
+        our_lookahead_usage_sqrt_spread_uncompute,
+        # Undo initial ripple carry adders.
+        hold(
+            duration=SimpleFormula(sqrt_n=1),
+            height=0),
+    )
+    our_sqrt_usage_uncompute = Tot.sequence(
+        # initial ripple carry adders.
+        hold(
+            duration=SimpleFormula(sqrt_n=1),
+            height=SimpleFormula(sqrt_n=2, constant=-1)),
+        # Carry lookahead within blocks
+        our_lookahead_usage_block_spread,
+        # Choose result.
+        hold(
+            duration=SimpleFormula(sqrt_n=1),
+            height=0),
+        # Undo carry lookahead.
+        our_lookahead_usage_block_spread_uncompute,
+        # Undo initial ripple carry adders.
+        hold(
+            duration=SimpleFormula(sqrt_n=1),
+            height=0),
+    )
+
+    two_block_usage = Tot.sequence(
+        # initial ripple carry adders.
+        hold(
+            duration=SimpleFormula(n=0.5),
+            height=3),
+        # Choose result.
+        fold_down(skip_start=2).reversed(),
+        # Undo initial ripple carry adders.
+        hold(
+            duration=SimpleFormula(n=0.5),
+            height=0),
+    )
+    two_block_usage_uncompute = Tot.sequence(
+        # Undo initial ripple carry adders.
+        hold(
+            duration=SimpleFormula(n=0.5),
+            height=2),
+        # Choose result.
+        fold_down(skip_start=2, scale=0).reversed(),
+        # initial ripple carry adders.
+        hold(
+            duration=SimpleFormula(n=0.5),
+            height=0),
+    )
+
+    comparison_table_tex = make_table([
         Adder(
             author="Cuccaro",
             year=2004,
@@ -189,10 +482,11 @@ if __name__ == '__main__':
             citation="gidney2018halving",
             type="Ripple Carry",
             in_place=True,
-            utilization=0.5,
             toffolis=SimpleFormula(n=1, constant=-1),
             reaction_depth=SimpleFormula(n=2, constant=-1),
             workspace=SimpleFormula(n=1),
+            toffoli_usage=hold(duration=SimpleFormula(n=1, constant=-1)).then(
+                hold(duration=SimpleFormula(n=1), height=0)),
         ),
         Adder(
             author="Gossett",
@@ -213,6 +507,7 @@ if __name__ == '__main__':
             workspace=SimpleFormula(n=1, lg_n=-1),
             reaction_depth=SimpleFormula(lg_n=2, constant=6 - 3),
             toffolis=SimpleFormula(n=5, lg_n=-3, constant=-4),
+            toffoli_usage=draper_lookahead_usage,
         ),
         Adder(
             author="Draper et al.",
@@ -223,6 +518,7 @@ if __name__ == '__main__':
             workspace=SimpleFormula(n=2, lg_n=-1, constant=-1),
             reaction_depth=SimpleFormula(lg_n=4, constant=14 - 7),
             toffolis=SimpleFormula(n=10, lg_n=-6, constant=-13),
+            toffoli_usage=draper_lookahead_usage.then(draper_lookahead_usage.reversed()),
         ),
         Adder(
             author="(this paper)",
@@ -233,6 +529,7 @@ if __name__ == '__main__':
             toffolis=SimpleFormula(n=3, b=-2, n_over_b=5, O_1=True),
             reaction_depth=SimpleFormula(b=3, lg_n_over_b=4, O_1=True),
             workspace=SimpleFormula(n=2, n_over_b=5, O_1=True),
+            toffoli_usage=our_block_usage
         ),
         Adder(
             author="(this paper)",
@@ -243,6 +540,7 @@ if __name__ == '__main__':
             toffolis=SimpleFormula(n=5, b=-4, n_over_b=10, O_1=True),
             reaction_depth=SimpleFormula(b=6, lg_n_over_b=8, O_1=True),
             workspace=SimpleFormula(n=2, n_over_b=5, O_1=True),
+            toffoli_usage=our_block_usage.then(our_block_usage_uncompute),
         ),
         Adder(
             author="(this paper)",
@@ -253,7 +551,7 @@ if __name__ == '__main__':
             toffolis=SimpleFormula(n=2),
             reaction_depth=SimpleFormula(n=1, O_1=True),
             workspace=SimpleFormula(n=1),
-            utilization=4/6,
+            toffoli_usage=two_block_usage,
         ),
         Adder(
             author="(this paper)",
@@ -264,7 +562,7 @@ if __name__ == '__main__':
             toffolis=SimpleFormula(n=3),
             reaction_depth=SimpleFormula(n=1.5, O_1=True),
             workspace=SimpleFormula(n=1),
-            utilization=3/4,
+            toffoli_usage=two_block_usage.then(two_block_usage_uncompute),
         ),
         Adder(
             author="(this paper)",
@@ -275,6 +573,7 @@ if __name__ == '__main__':
             toffolis=SimpleFormula(n=7),
             reaction_depth=SimpleFormula(lg_n=4, O_1=True),
             workspace=SimpleFormula(n=4, O_1=True),
+            toffoli_usage=our_lookahead_usage.then(our_lookahead_usage_uncompute),
         ),
         Adder(
             author="(this paper)",
@@ -285,6 +584,7 @@ if __name__ == '__main__':
             toffolis=SimpleFormula(n=4),
             reaction_depth=SimpleFormula(lg_n=2, O_1=True),
             workspace=SimpleFormula(n=3, O_1=True),
+            toffoli_usage=our_lookahead_usage,
         ),
         Adder(
             author="(this paper)",
@@ -295,6 +595,7 @@ if __name__ == '__main__':
             toffolis=SimpleFormula(n=5, sqrt_n=6, O_1=True),
             reaction_depth=SimpleFormula(sqrt_n=6, lg_n=4, O_1=True),
             workspace=SimpleFormula(n=2, sqrt_n=5, O_1=True),
+            toffoli_usage=our_sqrt_usage.then(our_sqrt_usage_uncompute),
         ),
         Adder(
             author="(this paper)",
@@ -305,8 +606,13 @@ if __name__ == '__main__':
             toffolis=SimpleFormula(n=3, sqrt_n=3, O_1=True),
             reaction_depth=SimpleFormula(sqrt_n=3, lg_n=2, O_1=True),
             workspace=SimpleFormula(n=2, sqrt_n=5, O_1=True),
+            toffoli_usage=our_sqrt_usage,
         ),
     ])
-    print(result)
+    print(comparison_table_tex)
     with open(pathlib.Path(__file__).parent.parent / 'gen/comparison_table.tex', 'w') as f:
-        print(result, file=f)
+        print(comparison_table_tex, file=f)
+
+
+if __name__ == '__main__':
+    main()
