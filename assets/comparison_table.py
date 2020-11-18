@@ -1,8 +1,10 @@
-from typing import Callable, Union, List, Optional
+from typing import Callable, Union, List, Optional, Tuple
+import matplotlib.pyplot as plt
 
 import dataclasses
 import math
 import pathlib
+import numpy as np
 
 import cirq
 
@@ -18,6 +20,9 @@ class SimpleFormula:
     sqrt_n: Union[int, float] = 0
     n: Union[int, float] = 0
     n2: Union[int, float] = 0
+
+    def is_b_sensitive(self):
+        return bool(self.b or self.lg_n_over_b or self.n_over_b)
 
     def value(self, n: int, b: int):
         return (
@@ -68,8 +73,43 @@ class SimpleFormula:
 
 
 class Tot:
-    def __init__(self, heights: Callable[[int], List[float]]):
+    def __init__(self, heights: Callable[[int, int], List[float]]):
         self.heights = heights
+
+    def simulate_supply(self, n: int, b: int, max_production_rate: float) -> Tuple[float, float, float]:
+        hs = self.heights(n, b)
+        supplies = []
+        supply = 100000
+        time = 0
+        attempts = 10
+        for k in range(3 + attempts):
+            start_supply = supply
+            start_time = time
+            for h in hs:
+                debt = h
+                time += 1
+                supplies.append(supply)
+                supply += max_production_rate
+                while debt > supply:
+                    # Stall.
+                    debt -= supply
+                    supplies.append(0)
+                    time += 1
+                    supply = max_production_rate
+                supply -= debt
+
+            # Initially try to find stable supply and production values.
+            if k < 3:
+                lowest = min(supplies + [supply])
+                if lowest > 0:
+                    if start_supply < supply:
+                        max_production_rate -= (supply - start_supply) / (time - start_time) * 0.999
+                    supply -= lowest
+                supplies.clear()
+                time = 0
+        average_supply = np.average(supplies)
+        average_time = time / attempts
+        return average_supply, average_time, max_production_rate
 
     @staticmethod
     def sequence(*items: 'Tot') -> 'Tot':
@@ -82,46 +122,42 @@ class Tot:
         return Tot(lambda n: [e * other for e in self.heights(n)])
 
     def reversed(self):
-        return Tot(lambda n: self.heights(n)[::-1])
+        return Tot(lambda n, b: self.heights(n, b)[::-1])
 
     def then(self, second: 'Tot', shift: int = 0) -> 'Tot':
-        def f(n: int) -> List[float]:
-            a = self.heights(n)
-            b = second.heights(n)
-            result = list(a)
-            for k in range(len(b)):
-                i = len(a) + k + shift
+        def f(n: int, b: int) -> List[float]:
+            h1 = self.heights(n, b)
+            h2 = second.heights(n, b)
+            result = list(h1)
+            for k in range(len(h2)):
+                i = len(h1) + k + shift
                 while len(result) <= i:
                     result.append(0)
-                result[i] += b[k]
+                result[i] += h2[k]
             return result
         return Tot(f)
 
-    def tikz_plot(self, n: int) -> str:
-        return tikz_plot(self.heights(n))
+    def tikz_plot(self, n: int, b: int) -> str:
+        return tikz_plot(self.heights(n, b))
 
     def overlap(self, second: 'Tot', shift: int = 0):
-        def f(n: int) -> List[int]:
-            a = self.heights(n)
-            b = second.heights(n)
-            result = list(a)
-            for k in range(len(b)):
+        def f(n: int, b: int) -> List[int]:
+            h1 = self.heights(n, b)
+            h2 = second.heights(n, b)
+            result = list(h1)
+            for k in range(len(h2)):
                 i = k + shift
                 while len(result) <= i:
                     result.append(0)
-                result[i] += b[k]
+                result[i] += h2[k]
             return result
         return Tot(f)
 
 
-def fold_down(*, scale: float = 1, skip_start: int = 0, skip_end: int = 0, blocks: bool = False, sqrt: bool = False) -> Tot:
-    def f(n: int) -> List[float]:
+def fold_down(*, scale: float = 1, skip_start: int = 0, skip_end: int = 0, width: SimpleFormula = SimpleFormula(n=1)) -> Tot:
+    def f(n: int, b: int) -> List[float]:
         result = []
-        k = n
-        if blocks:
-            k = int(math.ceil(n / DEFAULT_B))
-        if sqrt:
-            k = int(math.ceil(math.sqrt(n)))
+        k = width.value(n, b)
         for _ in range(skip_start):
             k >>= 1
         while k > 2**skip_end:
@@ -136,7 +172,7 @@ def hold(*, duration: Union[int, float, SimpleFormula], height: Union[int, float
         duration = SimpleFormula(constant=duration)
     if isinstance(height, (int, float)):
         height = SimpleFormula(constant=height)
-    return Tot(lambda n: [height.value(n, DEFAULT_B)] * int(math.ceil(duration.value(n, DEFAULT_B))))
+    return Tot(lambda n, b: [height.value(n, b)] * int(math.ceil(duration.value(n, b))))
 
 
 DEFAULT_N = 128
@@ -154,16 +190,23 @@ class Adder:
     reaction_depth: SimpleFormula
     workspace: SimpleFormula
     toffoli_usage: Optional[Tot] = None
-    utilization: float = 1.0
+
+    def toffoli_usage_or_def(self, n: int, b: int) -> Tot:
+        if self.toffoli_usage is None:
+            t = self.reaction_depth.value(n, b)
+            v = self.toffolis.value(n, b)
+            return hold(duration=t, height=v / t)
+        return self.toffoli_usage
 
     def toffoli_usage_tikz_plot(self) -> str:
-        if self.toffoli_usage is None:
-            t = self.reaction_depth.value(DEFAULT_N, DEFAULT_B)
-            v = self.toffolis.value(DEFAULT_N, DEFAULT_B)
-            r = hold(duration=t, height=v / t)
-        else:
-            r = self.toffoli_usage
-        return r.tikz_plot(DEFAULT_N)
+        return self.toffoli_usage_or_def(DEFAULT_N, DEFAULT_B).tikz_plot(DEFAULT_N, DEFAULT_B)
+
+    def is_b_sensitive(self):
+        return (
+            self.reaction_depth.is_b_sensitive() or
+            self.toffolis.is_b_sensitive() or
+            self.workspace.is_b_sensitive()
+        )
 
     def vol(self,
             *,
@@ -171,7 +214,15 @@ class Adder:
             factory_count: int,
             factory_period: int = 165,
             factory_area: int = 12 * 6,
-            reaction_time: int = 10):
+            reaction_time: int = 10) -> float:
+        if self.is_b_sensitive():
+            bs = range(2, n + 1)
+            if len(bs) > 50:
+                bs = list(range(2, 50))
+                while bs[-1] < n / 2:
+                    bs.append(int(bs[-1] * 1.2))
+        else:
+            bs = [DEFAULT_B]
         return min(self.vol_b(
             n=n,
             b=b,
@@ -179,7 +230,7 @@ class Adder:
             factory_period=factory_period,
             factory_area=factory_area,
             reaction_time=reaction_time)
-            for b in range(2, n + 1)
+            for b in bs
         )
 
     def vol_b(self,
@@ -189,23 +240,20 @@ class Adder:
             factory_count: int,
             factory_period: int = 165,
             factory_area: int = 12 * 6,
-            reaction_time: int = 10):
+            reaction_time: int = 10) -> float:
         tof = self.toffolis.value(n, b)
         dep = self.reaction_depth.value(n, b)
         space = self.workspace.value(n, b)
+        average_supply, average_time, max_production_rate = self.toffoli_usage_or_def(n, b).simulate_supply(
+            n, b, max_production_rate=factory_count / factory_period * reaction_time)
+        space += average_supply
         if self.in_place:
             space += 2*n
         else:
             space += 3*n
-        time = max(factory_period * (tof / factory_count) / self.utilization, reaction_time * dep)
+        time = average_time * reaction_time
         result = factory_area * factory_period * tof + space * time
-        result /= 1000 * 1000
-        result = str(int(result))
-
-        # 2 sig figs
-        if len(result) > 2:
-            result = result[:2] + '0' * (len(result) - 2)
-
+        result /= 1000 * 1000  # Microseconds to seconds.
         return result
 
 
@@ -243,7 +291,6 @@ def make_table(adders: List[Adder]) -> str:
     diagram.write(0, in_place_row - 1, r"\hline")
     diagram.write(0, out_of_place_row - 1, r"\hline")
     params = [(100, 10), (1000, 100), (10000, 1000)]
-    params = []
     vol_col = 7
     last_col = vol_col + len(params)
 
@@ -267,10 +314,41 @@ def make_table(adders: List[Adder]) -> str:
             diagram.write(5, row + r, '&' + adder.workspace.latex())
             diagram.write(6, row + r, '&' + adder.toffoli_usage_tikz_plot())
             for c, (n, f) in enumerate(params):
-                diagram.write(vol_col + c, row + r, '&' + adder.vol(n=n, factory_count=f))
+                v = str(int(adder.vol(n=n, factory_count=f)))
+                if len(v) > 2:
+                    v = v[:2] + '0' * (len(v) - 2)
+                diagram.write(vol_col + c, row + r, '&' + v)
             diagram.write(last_col, row + r, '\\\\')
     contents = diagram.render(horizontal_spacing=1, vertical_spacing=0)
     return r"\begin{tabular}{r|c|c|l|l|l|l" + '|c' * len(params) + "}\n" + contents + "\n\end{tabular}"
+
+
+def make_phase_diagram(adders: List[Adder]):
+    adders = sorted(adders, key=lambda adder: (adder.reaction_depth.value(1000000, b=20) + adder.year*20, adder.year, adder.author))
+    in_place_adders = [adder for adder in adders if adder.in_place]
+    out_of_place_adders = [adder for adder in adders if not adder.in_place]
+
+    ns = [32]
+    max_n = 100000
+    while ns[-1] < max_n:
+        ns.append(int(ns[-1] * 2))
+    ns[-1] = max_n
+    for kk, adder_set in enumerate((out_of_place_adders, in_place_adders)):
+        curves = []
+        for adder in adder_set:
+            volumes = []
+            for n in ns:
+                volumes.append(adder.vol(n=n, factory_count=int(math.ceil(n*0.1))))
+            curves.append((adder, volumes))
+        fig = plt.figure()
+        ax = fig.add_subplot(1, 1, 1)
+        for c in curves:
+            ax.plot(ns, c[1])
+        ax.set_yscale('log')
+        ax.set_xscale('log')
+        ax.legend([f"{adder.author} ({adder.year}) {adder.type}".replace('=b', '=best')
+                    for adder in adder_set])
+        plt.show()
 
 
 def main():
@@ -318,21 +396,21 @@ def main():
     ).reversed()
     our_lookahead_usage_block_spread = Tot.sequence(
         # Grow centered ranges.
-        fold_down(scale=2, skip_start=1, blocks=True),
+        fold_down(scale=2, skip_start=1, width=SimpleFormula(b=1)),
         # Spread zero-rooted ranges.
-        fold_down(skip_start=1, blocks=True).reversed().overlap(
+        fold_down(skip_start=1, width=SimpleFormula(b=1)).reversed().overlap(
             # Uncompute centered ranges.
-            fold_down(scale=0, skip_start=1, blocks=True).reversed(),
+            fold_down(scale=0, skip_start=1, width=SimpleFormula(b=1)).reversed(),
             shift=1
         ),
     )
     our_lookahead_usage_block_spread_uncompute = Tot.sequence(
         # Grow centered ranges.
-        fold_down(scale=0, skip_start=1, blocks=True),
+        fold_down(scale=0, skip_start=1, width=SimpleFormula(b=1)),
         # Spread zero-rooted ranges. (0 cost when uncomputing)
-        fold_down(scale=0, skip_start=1, blocks=True).reversed().overlap(
+        fold_down(scale=0, skip_start=1, width=SimpleFormula(b=1)).reversed().overlap(
             # Uncompute centered ranges.
-            fold_down(scale=2, skip_start=1, blocks=True).reversed(),
+            fold_down(scale=2, skip_start=1, width=SimpleFormula(b=1)).reversed(),
             shift=1
         ),
     )
@@ -375,21 +453,21 @@ def main():
 
     our_lookahead_usage_sqrt_spread = Tot.sequence(
         # Grow centered ranges.
-        fold_down(scale=2, skip_start=1, sqrt=True),
+        fold_down(scale=2, skip_start=1, width=SimpleFormula(sqrt_n=1)),
         # Spread zero-rooted ranges.
-        fold_down(skip_start=1, sqrt=True).reversed().overlap(
+        fold_down(skip_start=1, width=SimpleFormula(sqrt_n=1)).reversed().overlap(
             # Uncompute centered ranges.
-            fold_down(scale=0, skip_start=1, sqrt=True).reversed(),
+            fold_down(scale=0, skip_start=1, width=SimpleFormula(sqrt_n=1)).reversed(),
             shift=1
         ),
     )
     our_lookahead_usage_sqrt_spread_uncompute = Tot.sequence(
         # Grow centered ranges.
-        fold_down(scale=0, skip_start=1, sqrt=True),
+        fold_down(scale=0, skip_start=1, width=SimpleFormula(sqrt_n=1)),
         # Spread zero-rooted ranges. (0 cost when uncomputing)
-        fold_down(scale=0, skip_start=1, sqrt=True).reversed().overlap(
+        fold_down(scale=0, skip_start=1, width=SimpleFormula(sqrt_n=1)).reversed().overlap(
             # Uncompute centered ranges.
-            fold_down(scale=2, skip_start=1, sqrt=True).reversed(),
+            fold_down(scale=2, skip_start=1, width=SimpleFormula(sqrt_n=1)).reversed(),
             shift=1
         ),
     )
@@ -455,7 +533,7 @@ def main():
             height=0),
     )
 
-    comparison_table_tex = make_table([
+    adders = [
         Adder(
             author="Cuccaro",
             year=2004,
@@ -608,10 +686,13 @@ def main():
             workspace=SimpleFormula(n=2, sqrt_n=5, O_1=True),
             toffoli_usage=our_sqrt_usage,
         ),
-    ])
+    ]
+
+    comparison_table_tex = make_table(adders)
     print(comparison_table_tex)
     with open(pathlib.Path(__file__).parent.parent / 'gen/comparison_table.tex', 'w') as f:
         print(comparison_table_tex, file=f)
+    make_phase_diagram(adders)
 
 
 if __name__ == '__main__':

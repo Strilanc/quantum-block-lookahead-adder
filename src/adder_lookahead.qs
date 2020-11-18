@@ -30,10 +30,10 @@ namespace CG {
     ///     MeasureLE(out_c) == 0L
     ///
     /// Budget:
-    ///     Additional Workspace: 3*n + O(1)
-    ///     Reaction Depth: 2*lg(n) + O(1)
     ///     Toffoli Count: 4*n
     ///     Toffoli Count (uncomputing): 3*n
+    ///     Reaction Depth: 2*lg(n) + O(1)
+    ///     Additional Workspace: 3*n + O(1)
     ///     where n = Length(a)
     operation init_sum_using_carry_lookahead(
             a: LittleEndian,
