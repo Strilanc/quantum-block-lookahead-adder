@@ -54,7 +54,7 @@ showstringspaces=false
 
 \input{qcircuit}
 
-\title{Low depth quantum adders and waiting for magic states}
+\title{Quantum lookahead adders and the wait for magic states}
 \date{\today}
 \author{Craig Gidney}
 \email{craiggidney@google.com}
@@ -64,9 +64,9 @@ showstringspaces=false
 \maketitle
 
 \begin{abstract}
-    We improve the Toffoli count of low depth quantum adders, and analyze how their spacetime cost reacts to having a limited number of magic state factories.
+    We improve the Toffoli count of quantum lookahead adders, and analyze how their spacetime cost reacts to having a limited number of magic state factories.
     We present an out-of-place carry lookahead adder with a Toffoli count of $4n$ (vs $5n$ in previous work by Draper et al) and a corresponding in-place Toffoli count of $7n$ (vs $10n$ in previous work by Draper et al).
-    We also consider parallelizing over larger blocks of bits of size $b$, which reduces the Toffoli count to $3n + 5n/b$ out-of-place and $5n + 5n/b$ in-place at the cost of the reaction depth depending linearly on $b$.
+    We also present a block lookahead adder, that operates across blocks of bits of size $b$ and reduces the Toffoli count to $3n + 5n/b$ out-of-place and $5n + 5n/b$ in-place at the cost of the reaction depth depending linearly on $b$.
     We estimate the spacetime volume of these adders, and adders from previous work, for various register sizes and factory counts under plausible assumptions for a large scale quantum computer based on the surface code and superconducting qubits.
 \end{abstract}
 
@@ -76,17 +76,17 @@ In the classical computing world, low depth adders are everywhere.
 Even the original 8-bit Intel 8008 chip had a carry-lookahead adder \cite{shirriff2020reverseengineer8008}.
 But it's not clear if low depth adders will enjoy the same popularity in the world of fault tolerant quantum computation, because of huge implied space overheads from magic state distillation.
 
+The surface code \cite{fowler2012surfacereview} is a leading contender for the error correcting code used by future large scale quantum computers, because it has a high threshold and low connectivity requirements.
 In the surface code, non-Clifford operations like the T gate and the Toffoli gate aren't native operations.
 They have to be emulated using roundabout techniques like magic state distillation \cite{bravyi2005magicstate}.
 Magic state factories are expected to be expensive.
-For example in \cite{gidney2019catalyzed} a factory covers hundreds of thousands of physical qubits and produces a magic state every 165 microseconds (although new techniques are reducing the cost \cite{litinski2019magicnotcostly}).
-If a quantum computer can't host enough magic state factories, a low depth adder will bottleneck waiting for magic states.
+For example in \cite{gidney2019catalyzed} a factory covers hundreds of thousands of physical qubits (although new techniques are reducing the cost \cite{litinski2019magicnotcostly}).
 
-Suppose we have a quantum computer with a control system reaction time of 10 microseconds and a factory design that produces a Toffoli state every 165 microseconds as in \cite{gidney2019autoccz}.
+If a quantum computer can't host enough magic state factories, a low depth adder will bottleneck waiting for magic states.
+Suppose we have a quantum computer with a control system reaction time of 10 microseconds and a factory design that produces a Toffoli state roughly every 165 microseconds as in \cite{gidney2019autoccz}.
 Using a ripple-carry adder and reaction limited quantum computation \cite{fowler2012timeoptimal,gidney2019autoccz}, we would need 17 magic state factories before the ripple carry process was running at top speed.
 If a low depth adder takes five times more Toffolis, we need five times more factories ($17 \cdot 5 = 85$) to compensate.
-This means that, if we can't dedicate tens of millions of physical qubits to magic state distillation, the ripple carry adder will be faster by default.
-(For scale, tens of millions of qubits is more than twice the size of recent estimates for the cost of quantum chemistry computations involving FeMoCo \cite{lee2020hypercontractionchemistry}.)
+Ultimately this implies that, if we can't dedicate tens of millions of physical qubits to magic state distillation, the ripple carry adder will be faster by default.
 
 \begin{table}
 \centering
@@ -96,13 +96,82 @@ This means that, if we can't dedicate tens of millions of physical qubits to mag
     \caption{Comparison of various adders.
     The Toffoli over time column shows how many Toffolis a circuit executes during each time step (blank areas are due to AND uncomputations), using a logarithmic scale.
     The value $V(n,f)$ is an estimate (in units of logical qubits times seconds) of the spacetime volume required to execute an $n$-bit adder using at most $f$ magic state factories (see \sec{estimate} for more details).
-    This table is generated by the ancillary file \texttt{assets/comparison\_table.py}.
+    Generated by \texttt{assets/comparison\_table.py}.
     }
     \label{tbl:comparison}
 \end{table}
 
-Our goal in this paper is to reduce and quantify the space overhead implicit in using a low depth adder.
-We start in \sec{lookahead} by constructing a new carry lookahead adder based on quantizing the classical Brent-Kung adder \cite{brent1982adder} and using temporary ANDs \cite{gidney2018halving}.
+\begin{figure}
+    \centering
+    \minipage{0.5\textwidth}
+    \resizebox{\linewidth}{!}{
+    \includegraphics{gen/in-place-size-vs-vol.pdf}
+    }
+    \endminipage
+    \minipage{0.5\textwidth}
+    \resizebox{\linewidth}{!}{
+    \includegraphics{gen/out-of-place-size-vs-vol.pdf}
+    }
+    \endminipage
+    \caption{
+        Log-log plot of adder spacetime volume versus register size. Assumes the maximum factory count is one tenth the register size, that factories have a footprint of 72 logical qubits, that factories produce a magic state every 165 microseconds, and that the control system reaction time is 10 microseconds.
+        Generated by \texttt{assets/comparison\_table.py}.
+    }
+    \label{fig:size_versus_volume}
+\end{figure}
+
+\begin{figure}
+    \centering
+    \resizebox{\linewidth}{!}{
+    \includegraphics{gen/in-place-min-vol.pdf}
+    }
+    \caption{
+        Lowest volume in-place adder at various register sizes and maximum factory counts.
+        Assumes that factories have a footprint of 72 logical qubits, that factories produce a magic state every 165 microseconds, and that the control system reaction time is 10 microseconds.
+        Generated by \texttt{assets/comparison\_table.py}.
+    }
+    \label{fig:minif}
+\end{figure}
+
+\begin{figure}
+    \centering
+    \resizebox{\linewidth}{!}{
+    \includegraphics{gen/out-of-place-min-vol.pdf}
+    }
+    \caption{
+        Lowest volume out-of-place adder at various register sizes and maximum factory counts.
+        Assumes that factories have a footprint of 72 logical qubits, that factories produce a magic state every 165 microseconds, and that the control system reaction time is 10 microseconds.
+        Generated by \texttt{assets/comparison\_table.py}.
+    }
+    \label{fig:minof}
+\end{figure}
+
+\begin{figure}
+    \centering
+    \resizebox{\linewidth}{!}{
+    \includegraphics{gen/in-place-min-vol-half.pdf}
+    }
+    \resizebox{\linewidth}{!}{
+    \includegraphics{gen/out-of-place-min-vol-half.pdf}
+    }
+    \caption{
+        Lowest volume in-place and out-of-place adders at various register sizes and maximum factory counts, assuming improved magic state factories.
+        Assumes that factories have a footprint of 18 logical qubits, that factories produce a magic state every 82.5 microseconds, and that the control system reaction time is 10 microseconds.
+        Generated by \texttt{assets/comparison\_table.py}.
+    }
+    \label{fig:minioh}
+\end{figure}
+
+Although the example we just gave is in terms of the execution time of a circuit, focusing on just time can be misleading.
+In this paper, we're going to focus on the spacetime volume consumed by a circuit instead.
+This choice is based on the idea that any volume not used for one thing can be repurposed for some other useful task (like magic state distillation or temporary storage).
+The topological nature of surface code computations, which allows for deformations and rotations through spacetime, makes this assumption better than it might seem.
+That being said, beware that there are regimes where focusing on spacetime volume is the wrong thing to do.
+For example, in a world where space is limitless, making magic state factories effectively free, time is king and low depth adders are almost trivially better than ripple carry adders.
+But that is not the parameter regime we are interested in, so we will focus on volume.
+
+Our goal in this paper is to reduce and quantify the spacetime overhead implicit in using a low depth adder.
+We start in \sec{lookahead} by constructing a new carry lookahead adder based on quantizing the classical Brent-Kung adder \cite{brent1982adder} and on using temporary ANDs \cite{gidney2018halving}.
 Then, in \sec{block}, we sacrifice parallelism to further lower the Toffoli overhead.
 Instead of operating on every bit in parallel, we split the problem into blocks and operate on the blocks in parallel.
 In \sec{estimate}, we estimate the spacetime volume of our adders and previous adders in order to understand the parameter regimes where various adders dominate.
@@ -258,93 +327,44 @@ For example, slowing down the physical qubits used by a quantum computer will de
 This happens because architectures with slower physical qubits have a larger ratio $r$ between the reaction time of the control system and the depth of a magic state factory.
 They can do more control system round trips per factory, meaning reaction-limited computation can feed the outputs of more factories into a single serial circuit.
 
-To compare the adders, we start by listing their major costs in \tbl{comparison}.
-For each adder, we looked up or computed its Toffoli count, reaction depth, and workspace.
+To compare the adders, we started by looking up or computing their Toffoli count, reaction depth, workspace, and Toffoli states consumed by each round of the circuit.
 The Toffoli count is the number of Toffoli magic states that the circuit would consume.
 The reaction depth is the deepest chain of sequential adaptive measurements that occur in the circuit (keeping in mind that in the surface code every Toffoli gate, AND computation, and AND uncomputation involves an adaptive measurement).
 The workspace is the number of additional logical qubits needed in the abstract circuit model to run the circuit (i.e. not counting the substantial number of logical qubits used in magic state factories).
-The table also includes traces of how many Toffolis each construction wants to perform during each layer of the circuit.
+These values are listed in \tbl{comparison}.
 
-Next, in [FIGURE 1] and [FIGURE 2], we computed the expected spacetime volume of running each adder if the number of available factories was up to 10\% the register size of the addition.
+With the adder data collected, we wrote code to estimate the spacetime volume of an adder given a specified reaction time, factory footprint, and factory period.
+The code can be found in the \texttt{vol} method of the \texttt{Adder} class in the ancillar file \texttt{src/comparison\_table.py}.
+The code adds together spacetime estimates for the distillation of Toffoli states needed by the circuit, for storage of the circuit's input and output data, for storage of temporary qubits allocated during the execution of the circuit, and for buffering magic states during low-Toffoli-consumption periods in the circuit.
 If an adder needed fewer factories than the maximum, we did not count the unused factories against its spacetime volume (i.e. we assumed they would be used for something else instead).
-We assumed that Toffolis were being performed using the distance 31 factory from \cite{gidney2019autoccz}, with a control system reaction time of 10 microseconds.
-We accounted for adders having variable Toffoli rates by simulating a growing and shrinking supply of Toffoli states as the circuit executed, and adding the spacetime volume required to store the supply to the spacetime cost of the adder.
 
-\begin{figure}
-    \centering
-    \minipage{0.5\textwidth}
-    \resizebox{\linewidth}{!}{
-    \includegraphics{gen/in-place-size-vs-vol.pdf}
-    }
-    \endminipage
-    \minipage{0.5\textwidth}
-    \resizebox{\linewidth}{!}{
-    \includegraphics{gen/out-of-place-size-vs-vol.pdf}
-    }
-    \endminipage
-    \caption{
-        Log-log plot of adder spacetime volume versus register size. Assumes the maximum factory count is one tenth the register size, that factories have a footprint of 72 logical qubits, that factories produce a magic state every 165 microseconds, and that the control system reaction time is 10 microseconds.
-        This diagram is generated by the ancillary file \texttt{assets/comparison\_table.py}.
-    }
-    \label{fig:my_label}
-\end{figure}
-
-\begin{figure}
-    \centering
-    \resizebox{\linewidth}{!}{
-    \includegraphics{gen/in-place-min-vol.pdf}
-    }
-    \caption{
-        Heat map of the best in-place adder at various register sizes and maximum factory counts.
-        Assumes that factories have a footprint of 72 logical qubits, that factories produce a magic state every 165 microseconds, and that the control system reaction time is 10 microseconds.
-        This diagram is generated by the ancillary file \texttt{assets/comparison\_table.py}.
-    }
-    \label{fig:my_label}
-\end{figure}
-
-\begin{figure}
-    \centering
-    \resizebox{\linewidth}{!}{
-    \includegraphics{gen/out-of-place-min-vol.pdf}
-    }
-    \caption{
-        Heat map of the best out-of-place adder at various register sizes and maximum factory counts.
-        Assumes that factories have a footprint of 72 logical qubits, that factories produce a magic state every 165 microseconds, and that the control system reaction time is 10 microseconds.
-        This diagram is generated by the ancillary file \texttt{assets/comparison\_table.py}.
-    }
-    \label{fig:my_label}
-\end{figure}
-
-\begin{figure}
-    \centering
-    \resizebox{\linewidth}{!}{
-    \includegraphics{gen/in-place-min-vol-half.pdf}
-    }
-    \caption{
-        Heat map of the best in-place adder at various register sizes and maximum factory counts, assuming factories with half the code distance compared to elsewhere in the paper.
-        Assumes that factories have a footprint of 18 logical qubits, that factories produce a magic state every 82.5 microseconds, and that the control system reaction time is 10 microseconds.
-        This diagram is generated by the ancillary file \texttt{assets/comparison\_table.py}.
-    }
-    \label{fig:my_label}
-\end{figure}
-
-\begin{figure}
-    \centering
-    \resizebox{\linewidth}{!}{
-    \includegraphics{gen/out-of-place-min-vol-half.pdf}
-    }
-    \caption{
-        Heat map of the best out-of-place adder at various register sizes and maximum factory counts, assuming factories with half the code distance compared to elsewhere in the paper.
-        Assumes that factories have a footprint of 18 logical qubits, that factories produce a magic state every 82.5 microseconds, and that the control system reaction time is 10 microseconds.
-        This diagram is generated by the ancillary file \texttt{assets/comparison\_table.py}.
-    }
-    \label{fig:my_label}
-\end{figure}
+We used the volume estimation code to generate several figures.
+We assumed a factory footprint of 72 logical qubits, a factory duration of 165 microseconds, and a control system reaction time of 10 microseconds.
+\fig{size_versus_volume} plots the estimated spacetime volume of an adder versus the register size of the addition being performed, assuming the maximum factory count is 10\% of the register size.
+Note how the best adders are ripple-carry adders, until register sizes are in the thousands.
+In \fig{minif} and \fig{minof} we plotted 2d heatmaps showing the in-place and out-of-place adders with the best estimated spacetime volume, for various register sizes and maximum factory counts.
+Again we see that the best adders are ripple-carry adders until register sizes are in the thousands, but we can now also see that factory counts must be nearly 100 (or larger).
+\fig{minioh} also has 2d heatmaps showing the adder with the best estimated spacetime volume, but assumes factories are half the code distance (i.e. a quarter the footprint area and half the duration).
+This moves the transition from ripple-carry adders to low-depth adders downwards, to register sizes in the hundreds of qubits and factory counts around 50.
 
 \section{Conclusion}
 \label{sec:conclusion}
 
-Adder good.
+In this paper we presented a carry lookahead adder with a lower Toffoli count than in previous work, and a block lookahead adder that can further lower the Toffoli count at the cost of increasing the depth.
+We wrote code to estimate the spacetime volume of these adders, and previous adders, and compared them over a range of register sizes and maximum factory counts.
+We found that our adders have lower spacetime volume than previous low depth adders.
+However, we also demonstrated that ripply carry adders have the best estimated spacetime volumes for register sizes up to 200 and for maximum factory counts up to 50.
+This is a surprising contrast to the classical world, where carry lookahead adders are used even for 8 bit additions \cite{shirriff2020reverseengineer8008}.
+
+An important type of adder that we didn't consider in this paper is adders that operate on representations of an integer other than 2s complement.
+For example, Shor's factoring algorithm \cite{shor1994algorithms} seems to be a perfect candidate for carry lookahead adders because Shor's factoring algorithm perform arithmetic on registers whose sizes are in the thousands.
+The problem is that, by adding log-sized ``carry runways" to registers, the addition problem can be split into (an exponentially good approximation of) independent pieces \cite{gidney2019approximate}.
+It's possible to stay in this format while executing Shor's algorithm \cite{gidney2019factor}, meaning parallelization of the additions can be done with additive logarithmic overhead in the Toffoli count (via carry runways) instead of constant multiplicative overhead (via carry lookahead).
+
+Overall, our conclusion is that quantum lookahead adders are currently not very compelling when compared to ripple carry adders and to other alternatives for parallelization (such as reaction limited computation and carry runways).
+We can only hope that, as theoretical and engineering advances are made and the projected cost of quantum fault tolerance steadily decreases, hindsight will show that this conclusion was quaintly naive.
+
+
 
 \bibliographystyle{plain}
 \bibliography{references}
