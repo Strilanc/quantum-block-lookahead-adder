@@ -64,10 +64,10 @@ showstringspaces=false
 \maketitle
 
 \begin{abstract}
-    We improve the Toffoli count of quantum lookahead adders, and analyze how their spacetime cost reacts to having a limited number of magic state factories.
-    We present an out-of-place carry lookahead adder with a Toffoli count of $4n$ (vs $5n$ in previous work by Draper et al) and a corresponding in-place Toffoli count of $7n$ (vs $10n$ in previous work by Draper et al).
-    We also present a block lookahead adder, that operates across blocks of bits of size $b$ and reduces the Toffoli count to $3n + 5n/b$ out-of-place and $5n + 5n/b$ in-place at the cost of the reaction depth depending linearly on $b$.
-    We estimate the spacetime volume of these adders, and adders from previous work, for various register sizes and factory counts under plausible assumptions for a large scale quantum computer based on the surface code and superconducting qubits.
+We improve the Toffoli count of quantum lookahead adders, and analyze how their spacetime cost reacts to having a limited number of magic state factories.
+We present an out-of-place carry lookahead adder with a Toffoli count of $4n$ (vs $5n$ in previous work by Draper et al) and a corresponding in-place Toffoli count of $7n$ (vs $10n$ in previous work by Draper et al).
+We also present a block lookahead adder, that operates across blocks of bits of size $b$ and reduces the Toffoli count to $3n + 5n/b$ out-of-place and $5n + 5n/b$ in-place at the cost of the reaction depth depending linearly on $b$.
+We estimate the spacetime volume of these adders, and adders from previous work, for various register sizes and factory counts under plausible assumptions for a large scale quantum computer based on the surface code and superconducting qubits.
 \end{abstract}
 
 \section{Introduction}
@@ -187,7 +187,7 @@ The original motivating idea for this paper was to attempt to quantize the Brent
 The result is similar to the carry lookahead circuit created by Draper et al \cite{draper2004lookaheadadder}, with a key difference being the usage of additional ancilla to uncompute ANDs using no Toffoli gates \cite{gidney2018halving}.
 
 To propagate carries quickly, we will be considering various contiguous bit ranges and computing a ternary value that describes the carry behavior of these ranges.
-Define the integer slicing operation $k[a:b] = \lfloor k/2^a \rfloor \bmod 2^{b-a+1}$.
+Define the integer bit slicing operation $k[a:b] = \lfloor k/2^a \rfloor \bmod 2^{b-a+1}$.
 Let $x$ and $y$ be $n$-bit little-endian 2s-complement inputs into the addition.
 We define
 
@@ -223,14 +223,14 @@ The main difficulty is in finding a good strategy for fusing carry values, that 
 This is where the Brent-Kung adder comes in: it specifies a fusing pattern that we mimic.
 
 We start by computing all unit length ranges $C_k^{k+1}$ in parallel, and then spend $\lg n + O(1)$ rounds iteratively fusing these ranges together to produce ranges that cross larger distances.
-During round $s$, starting with $s=0$, we (in parallel) consider each bit position $k$ and fuse ranges of the form $C_{2^s 2k}^{2^s (k+1/2)}, C_{2^s (k+1/2) }^{2^s (k+1)}$.
+During round $s$, starting with $s=1$, we (in parallel) consider each bit position $k$ and fuse ranges of the form $C_{2^s 2k}^{2^s (k+1/2)}, C_{2^s (k+1/2) }^{2^s (k+1)}$.
 We skip any ranges whose end falls beyond the end of the register.
 
 Once the process of computing the carry values for long distances ranges has completed, we begin using those values to complete the carry values for ranges starting at 0.
 Let $p$ be the largest power of two no larger than $n$.
 We have already computed $C_{0,p}$ and $C_{p,p+p/2}$, and we can fuse these two carry values to get $C_{0,p+p/2}$.
-We continue this process in rounds, where in round $s$ we fuse range pairs of the form $C_0^{p/2^s*k}, C_{p/2^s*k}^{p/2^s*k+p/2^{s+1}}$ and end up knowing all values $C_{0}^{k}$ where $k$ is a multiple of $p/2^{s+1}$.
-After $\lg p + O(1)$ rounds we know all of the carry-from-zero values, and can compute the final sum.
+We continue this process in rounds, where in round $s$ we fuse range pairs of the form $C_0^{p/2^s \cdot k}, C_{p/2^s \cdot k}^{p/2^s \cdot k+p/2^{s+1}}$ and end up knowing all values $C_{0}^{k}$ where $k$ is a multiple of $p/2^{s+1}$.
+After $\lg n + O(1)$ rounds we know all of the carry-from-zero values, and can compute the final sum.
 All that's left to do is to uncompute the intermediate carry values.
 
 This process is implemented by the \texttt{init\_sum\_using\_carry\_lookahead} method in the \\\texttt{src/adder\_lookahead.qs} ancillary file.
@@ -274,10 +274,9 @@ Therefore the resulting in-place adder has a total Toffoli count of $7n$, a doub
 
 In the previous section we computed an initial carry value for every bit position, and then began combining these carry values.
 We can instead start the process by computing initial carry values for blocks of $b$ bits.
-To give a sense of how this will work, we start with a minimally-parallel parallel adder: the two-block-adder.
-It divides an $n$-bit addition problem into two $n/2$-bit chunks.
-The two-block-adder starts by performing three ripple carry additions in parallel: adding the low chunks with no carry input, adding the high chunks with no carry input, and adding the high chunks with a set carry input.
-As soon as the low chunk addition produces a carry output, this carry output is used to decide which of the two high chunk addition results to keep.
+To give a sense of how this will work, we start with a minimally-parallel parallel adder: the two block adder.
+It divides an $n$-bit addition problem into two $n/2$-bit chunks and performs three ripple carry additions in parallel: adding the low chunks with no carry input, adding the high chunks with no carry input, and adding the high chunks with a set carry input.
+As soon as the low chunk addition produces a carry output, this carry output is used to decide which of the two high chunk addition results to keep, and then intermediate values are uncomputed.
 
 Here is pseudo-code describing the two block adder:
 
@@ -296,16 +295,16 @@ Here is pseudo-code describing the two block adder:
 
 The ancillary file \texttt{src/adder\_two\_block.qs} has Q\# code implementing this adder.
 
-We can generalize the 2-block-adder into an $m$-block-adder, or equivalently into an adder with blocks of width $b$ where $m=n/b$.
-We can then use the carry-fusing subroutine we created in the previous section to quickly propagate the carry values from these blocks, and keep the correct output from each block.
+We can generalize the two  block adder into an adder with $m$ blocks, or equivalently into an adder with blocks of width $b$ where $m=n/b$.
+We can use the carry-fusing subroutine we created in the previous section to quickly propagate carry values between these blocks, and use the propagated carry value to keep the correct output from each block.
 The main cost we pay for doing this, compared to parallelizing over every bit, is that the 1s bit of the initial carry values is no longer the xor of the two inputs.
 We will need to spend Toffolis computing these bits and allocate a register to storing them.
 Fortunately, the benefits we gain will outweigh these costs.
 
-We now compute the Toffoli count of the block lookahead adder, with $n$ bits and a block width of $b$.
+The Toffoli count of the block lookahead adder depends on both the register size $n$ and the block size $b$.
 To start with, there are $2n-b$ Toffolis used to compute the two carry-in cases for each block except the first block.
-The carry-out bits of these cases are then combined into initial carry range values using no Toffolis, and $3n/b$ Toffolis are used to compute final propagated carry values from these initial values.
-Once the final propagate carry values are available, $n-b$ Toffolis are used to control, for each block except the first block, which of the two cases gets kept.
+The carry-out bits of these cases are combined into initial ternary carry values, and $3n/b$ Toffolis are used to compute final propagated carry values from these initial values.
+Once the final propagated carry values are available, $n-b$ Toffolis are used to control, for each block except the first block, which of the carry-in cases is kept.
 Then all intermediate values are uncomputed using no Toffolis.
 
 The total Toffoli count of this out-of-place adder is $3n + 5n/b$, which is less than the adder from the previous section as long as $b > 5$.
@@ -321,48 +320,51 @@ This process is implemented by the \texttt{init\_sum\_using\_blocks} method in t
 In a tiny quantum computer that can barely support a single magic state factory, ripple carry adders will always be best.
 Conversely, in a huge quantum computer where space is too cheap to meter, low depth adders will dominate.
 In this section our goal is to understand the intermediate regime between these two extremes.
-
-Note that some architectural parameters can have surprising effects.
+Beware that some architectural parameters can have surprising effects.
 For example, slowing down the physical qubits used by a quantum computer will decrease (not increase!) the effectiveness of low depth adders.
 This happens because architectures with slower physical qubits have a larger ratio $r$ between the reaction time of the control system and the depth of a magic state factory.
 They can do more control system round trips per factory, meaning reaction-limited computation can feed the outputs of more factories into a single serial circuit.
 
-To compare the adders, we started by looking up or computing their Toffoli count, reaction depth, workspace, and Toffoli states consumed by each round of the circuit.
+To compare adders, we started by looking up or computing their Toffoli count, reaction depth, workspace, and Toffoli consumption rates over time.
 The Toffoli count is the number of Toffoli magic states that the circuit would consume.
 The reaction depth is the deepest chain of sequential adaptive measurements that occur in the circuit (keeping in mind that in the surface code every Toffoli gate, AND computation, and AND uncomputation involves an adaptive measurement).
-The workspace is the number of additional logical qubits needed in the abstract circuit model to run the circuit (i.e. not counting the substantial number of logical qubits used in magic state factories).
+The workspace is the number of additional logical qubits needed in the abstract circuit model to run the circuit (i.e. not counting logical qubits used for magic state factories or for storing the input/output).
 These values are listed in \tbl{comparison}.
 
 With the adder data collected, we wrote code to estimate the spacetime volume of an adder given a specified reaction time, factory footprint, and factory period.
-The code can be found in the \texttt{vol} method of the \texttt{Adder} class in the ancillar file \texttt{src/comparison\_table.py}.
+The code can be found in the \texttt{vol} method of the \texttt{Adder} class in the ancillary file \texttt{src/comparison\_table.py}.
 The code adds together spacetime estimates for the distillation of Toffoli states needed by the circuit, for storage of the circuit's input and output data, for storage of temporary qubits allocated during the execution of the circuit, and for buffering magic states during low-Toffoli-consumption periods in the circuit.
 If an adder needed fewer factories than the maximum, we did not count the unused factories against its spacetime volume (i.e. we assumed they would be used for something else instead).
 
 We used the volume estimation code to generate several figures.
-We assumed a factory footprint of 72 logical qubits, a factory duration of 165 microseconds, and a control system reaction time of 10 microseconds.
 \fig{size_versus_volume} plots the estimated spacetime volume of an adder versus the register size of the addition being performed, assuming the maximum factory count is 10\% of the register size.
-Note how the best adders are ripple-carry adders, until register sizes are in the thousands.
+Note how, in this figure, the best adders are ripple-carry adders until register sizes are in the thousands.
 In \fig{minif} and \fig{minof} we plotted 2d heatmaps showing the in-place and out-of-place adders with the best estimated spacetime volume, for various register sizes and maximum factory counts.
-Again we see that the best adders are ripple-carry adders until register sizes are in the thousands, but we can now also see that factory counts must be nearly 100 (or larger).
-\fig{minioh} also has 2d heatmaps showing the adder with the best estimated spacetime volume, but assumes factories are half the code distance (i.e. a quarter the footprint area and half the duration).
-This moves the transition from ripple-carry adders to low-depth adders downwards, to register sizes in the hundreds of qubits and factory counts around 50.
+Once again the best adders are ripple-carry adders until register sizes are in the thousands, but this plot also shows that ripple carry adders dominate until factory counts are nearly 100.
+\fig{minioh} also has 2d heatmaps showing the adder with the best estimated spacetime volume, but assumes improved factories using half the code distance (i.e. a quarter the footprint area and half the duration).
+This moves the transition from ripple-carry adders to lookahead adders downwards, to register sizes in the hundreds of qubits and factory counts around 50.
 
 \section{Conclusion}
 \label{sec:conclusion}
 
 In this paper we presented a carry lookahead adder with a lower Toffoli count than in previous work, and a block lookahead adder that can further lower the Toffoli count at the cost of increasing the depth.
-We wrote code to estimate the spacetime volume of these adders, and previous adders, and compared them over a range of register sizes and maximum factory counts.
+We implemented these adders in Q\#, which allowed us to verify that they computed the correct result while using at most the stated number of Toffolis and workspace qubits (unfortunately Q\# is not currently able to verify the reaction depth).
+We wrote Python code to estimate the spacetime volume of these adders, and previous adders, and compared them over a range of register sizes and maximum factory counts.
 We found that our adders have lower spacetime volume than previous low depth adders.
 However, we also demonstrated that ripply carry adders have the best estimated spacetime volumes for register sizes up to 200 and for maximum factory counts up to 50.
 This is a surprising contrast to the classical world, where carry lookahead adders are used even for 8 bit additions \cite{shirriff2020reverseengineer8008}.
 
 An important type of adder that we didn't consider in this paper is adders that operate on representations of an integer other than 2s complement.
-For example, Shor's factoring algorithm \cite{shor1994algorithms} seems to be a perfect candidate for carry lookahead adders because Shor's factoring algorithm perform arithmetic on registers whose sizes are in the thousands.
-The problem is that, by adding log-sized ``carry runways" to registers, the addition problem can be split into (an exponentially good approximation of) independent pieces \cite{gidney2019approximate}.
-It's possible to stay in this format while executing Shor's algorithm \cite{gidney2019factor}, meaning parallelization of the additions can be done with additive logarithmic overhead in the Toffoli count (via carry runways) instead of constant multiplicative overhead (via carry lookahead).
+These adders cannot be used in all situations, but are sometimes the best choice.
+For example, consider that Shor's factoring algorithm \cite{shor1994algorithms} seems to be a perfect candidate for carry lookahead adders because Shor's factoring algorithm perform arithmetic on registers whose sizes are in the thousands.
+However, by adding log-sized ``carry runways" to registers, the addition problem can be split into (an exponentially good approximation of) independent pieces \cite{gidney2019approximate}.
+Also, it's possible to stay in this format while executing Shor's algorithm \cite{gidney2019factor}.
+This means that parallelization of the additions in Shor's algorithm can be done with additive logarithmic overhead in the Toffoli count (via carry runways) instead of constant multiplicative overhead (via carry lookahead).
 
-Overall, our conclusion is that quantum lookahead adders are currently not very compelling when compared to ripple carry adders and to other alternatives for parallelization (such as reaction limited computation and carry runways).
-We can only hope that, as theoretical and engineering advances are made and the projected cost of quantum fault tolerance steadily decreases, hindsight will show that this conclusion was quaintly naive.
+Overall, we believe that a clear conclusion of our work and our numerics is that quantum lookahead adders are rarely the best choice of adder.
+At least, not in our cost model; which we think is representative of potential future quantum computers based on superconducting qubits and the surface code.
+There is too much competition from below in the form of ripple carry adders, and from above in the form of other alternatives for parallelization (such as reaction limited computation and carry runways).
+We can only hope that, as theoretical and engineering advances are made, and the projected cost of quantum fault tolerance steadily decreases, hindsight will show that this conclusion was quaintly naive.
 
 
 
