@@ -16,14 +16,27 @@ import cirq
 @dataclasses.dataclass
 class SimpleFormula:
     O_1: bool = False
-    b: int = 0
-    n_over_b: int = 0
-    lg_n_over_b: int = 0
-    constant: float = 0
+    b: Union[int, float] = 0
+    n_over_b: Union[int, float] = 0
+    lg_n_over_b: Union[int, float] = 0
+    constant: Union[int, float] = 0
     lg_n: Union[int, float] = 0
     sqrt_n: Union[int, float] = 0
     n: Union[int, float] = 0
     n2: Union[int, float] = 0
+
+    def __mul__(self, other: Union[int, float]) -> 'SimpleFormula':
+        return SimpleFormula(
+            O_1=self.O_1,
+            b=self.b * other,
+            n_over_b=self.n_over_b * other,
+            lg_n_over_b=self.lg_n_over_b * other,
+            constant=self.constant * other,
+            lg_n=self.lg_n * other,
+            sqrt_n=self.sqrt_n * other,
+            n=self.n * other,
+            n2=self.n2 * other,
+        )
 
     def is_b_sensitive(self):
         return bool(self.b or self.lg_n_over_b or self.n_over_b)
@@ -158,14 +171,23 @@ class Tot:
         return Tot(f)
 
 
-def fold_down(*, scale: float = 1, skip_start: int = 0, skip_end: int = 0, width: SimpleFormula = SimpleFormula(n=1)) -> Tot:
+def fold_down(*,
+              scale: float = 1,
+              skip_start: int = 0,
+              skip_end: int = 0,
+              width: SimpleFormula = SimpleFormula(n=1),
+              reps: int = 1,
+              gap: int = 0) -> Tot:
     def f(n: int, b: int) -> List[float]:
         result = []
         k = width.value(n, b)
         for _ in range(skip_start):
             k >>= 1
         while k > 2**skip_end:
-            result.append(k * scale)
+            for _ in range(reps):
+                result.append(k * scale)
+            for _ in range(gap):
+                result.append(0)
             k >>= 1
         return result
     return Tot(f)
@@ -242,10 +264,10 @@ class Adder:
             *,
             n: int,
             b: int,
-            factory_count: int,
-            factory_period: int = 165,
-            factory_area: int = 12 * 6,
-            reaction_time: int = 10) -> float:
+            factory_count: float,
+            factory_period: float = 165,
+            factory_area: float = 12 * 6,
+            reaction_time: float = 10) -> float:
         tof = self.toffolis.value(n, b)
         dep = self.reaction_depth.value(n, b)
         space = self.workspace.value(n, b)
@@ -287,7 +309,7 @@ def tikz_plot(heights: List[float]):
 
 
 def make_table(adders: List[Adder]) -> str:
-    adders = sorted(adders, key=lambda adder: (adder.reaction_depth.value(1000000, b=20) + adder.year*20, adder.year, adder.author))
+    adders = sorted(adders, key=lambda adder: (adder.year, adder.author, adder.type))
     in_place_adders = [adder for adder in adders if adder.in_place]
     out_of_place_adders = [adder for adder in adders if not adder.in_place]
     in_place_row = 2
@@ -329,7 +351,7 @@ def make_table(adders: List[Adder]) -> str:
 
 
 def plot_phase_diagram(adders: List[Adder], out_dir: pathlib.Path):
-    adders = sorted(adders, key=lambda adder: (adder.year, adder.author))
+    adders = sorted(adders, key=lambda adder: (adder.year, adder.author, adder.type))
     adders = [adder for adder in adders if not adder.dominated_in_phase_diagram]
     in_place_adders = [adder for adder in adders if adder.in_place]
     out_of_place_adders = [adder for adder in adders if not adder.in_place]
@@ -434,7 +456,7 @@ def plot_phase_diagram_helper(adder_set: List[Adder],
 
 
 def plot_volume_vs_size(adders: List[Adder], out_dir: pathlib.Path):
-    adders = sorted(adders, key=lambda adder: (adder.reaction_depth.value(1000000, b=20) + adder.year*20, adder.year, adder.author))
+    adders = sorted(adders, key=lambda adder: (adder.year, adder.author, adder.type))
     in_place_adders = [adder for adder in adders if adder.in_place]
     out_of_place_adders = [adder for adder in adders if not adder.in_place]
 
@@ -647,6 +669,14 @@ def main():
             duration=SimpleFormula(n=0.5),
             height=0),
     )
+    mogenson_usage_compute = Tot.sequence(
+        # AND together (a_k xor b_k)'s while c-swapping a_k's.
+        # (Could be overlapped but are not in the paper.)
+        fold_down(skip_start=1, reps=2),
+        # Restore a_k and uncompute intermediate (a_k xor b_k).
+        # (Could be overlapped down to 3 instead of 4. Not done in the paper due to CNOTs counting.)
+        fold_down(skip_start=1, reps=4).reversed(),
+    )
 
     adders = [
         Adder(
@@ -805,11 +835,32 @@ def main():
             toffoli_usage=our_sqrt_usage,
             dominated_in_phase_diagram=True,
         ),
+        Adder(
+            author="Mogensen",
+            year=2019,
+            citation="mogensen2019lookahead",
+            type="Carry Lookahead",
+            in_place=False,
+            toffolis=SimpleFormula(n=6, constant=-4) * 2,  # End of section 5.1
+            reaction_depth=SimpleFormula(lg_n=6, constant=2) * 2,  # End of section 5.2
+            workspace=SimpleFormula(n=1, lg_n=-1, constant=-1) * 2, # End of section 5.3
+            toffoli_usage=mogenson_usage_compute,
+        ),
+        Adder(
+            author="Mogensen",
+            year=2019,
+            citation="mogensen2019lookahead",
+            type="Carry Lookahead",
+            in_place=True,
+            toffolis=SimpleFormula(n=6, constant=-4),  # End of section 5.1
+            reaction_depth=SimpleFormula(lg_n=6, constant=2),  # End of section 5.2
+            workspace=SimpleFormula(n=1, lg_n=-1, constant=-1),  # End of section 5.3
+            toffoli_usage=mogenson_usage_compute.then(mogenson_usage_compute.reversed()),
+        ),
     ]
 
     out_dir = pathlib.Path(__file__).parent.parent / 'gen'
     comparison_table_tex = make_table(adders)
-    print(comparison_table_tex)
     comp_path = out_dir / 'comparison_table.tex'
     with open(comp_path, 'w') as f:
         print(comparison_table_tex, file=f)
