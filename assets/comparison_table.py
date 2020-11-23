@@ -1,4 +1,8 @@
 from typing import Callable, Union, List, Optional, Tuple
+import matplotlib
+import matplotlib.axes
+import matplotlib.figure
+import matplotlib.patches
 import matplotlib.pyplot as plt
 
 import dataclasses
@@ -79,9 +83,9 @@ class Tot:
     def simulate_supply(self, n: int, b: int, max_production_rate: float) -> Tuple[float, float, float]:
         hs = self.heights(n, b)
         supplies = []
-        supply = 100000
+        supply = 1000000
         time = 0
-        attempts = 10
+        attempts = 4
         for k in range(3 + attempts):
             start_supply = supply
             start_time = time
@@ -190,6 +194,7 @@ class Adder:
     reaction_depth: SimpleFormula
     workspace: SimpleFormula
     toffoli_usage: Optional[Tot] = None
+    dominated_in_phase_diagram: bool = False
 
     def toffoli_usage_or_def(self, n: int, b: int) -> Tot:
         if self.toffoli_usage is None:
@@ -212,9 +217,9 @@ class Adder:
             *,
             n: int,
             factory_count: int,
-            factory_period: int = 165,
-            factory_area: int = 12 * 6,
-            reaction_time: int = 10) -> float:
+            factory_period: float = 165,
+            factory_area: float = 12 * 6,
+            reaction_time: float = 10) -> float:
         if self.is_b_sensitive():
             bs = range(2, n + 1)
             if len(bs) > 50:
@@ -323,7 +328,112 @@ def make_table(adders: List[Adder]) -> str:
     return r"\begin{tabular}{r|c|c|l|l|l|l" + '|c' * len(params) + "}\n" + contents + "\n\end{tabular}"
 
 
-def make_phase_diagram(adders: List[Adder]):
+def plot_phase_diagram(adders: List[Adder], out_dir: pathlib.Path):
+    adders = sorted(adders, key=lambda adder: (adder.year, adder.author))
+    adders = [adder for adder in adders if not adder.dominated_in_phase_diagram]
+    in_place_adders = [adder for adder in adders if adder.in_place]
+    out_of_place_adders = [adder for adder in adders if not adder.in_place]
+
+    register_sizes = [8]
+    g = 1.5
+    max_n = 20000
+    max_f = max_n
+    while register_sizes[-1] < max_n:
+        register_sizes.append(int(math.ceil(register_sizes[-1] * g)))
+    register_sizes[-1] = max_n
+    factory_counts = [8]
+    while factory_counts[-1] < max_f:
+        factory_counts.append(int(math.ceil(factory_counts[-1] * g)))
+    factory_counts[-1] = max_f
+    plot_phase_diagram_helper(out_of_place_adders,
+                              "Min-volume out-of-place adder vs size and factories",
+                              filepath=out_dir / 'out-of-place-min-vol.pdf',
+                              d=1.0,
+                              factory_counts=factory_counts,
+                              register_sizes=register_sizes)
+    plot_phase_diagram_helper(in_place_adders,
+                              "Min-volume in-place adder vs size and factories",
+                              filepath=out_dir / 'in-place-min-vol.pdf',
+                              d=1.0,
+                              factory_counts=factory_counts,
+                              register_sizes=register_sizes)
+    plot_phase_diagram_helper(out_of_place_adders,
+                              "Min-volume out-of-place adder vs size and half-distance factories",
+                              filepath=out_dir / 'out-of-place-min-vol-half.pdf',
+                              d=0.5,
+                              factory_counts=factory_counts,
+                              register_sizes=register_sizes)
+    plot_phase_diagram_helper(in_place_adders,
+                              "Min-volume out-of-place adder vs size and half-distance factories",
+                              filepath=out_dir / 'in-place-min-vol-half.pdf',
+                              d=0.5,
+                              factory_counts=factory_counts,
+                              register_sizes=register_sizes)
+
+
+def plot_phase_diagram_helper(adder_set: List[Adder],
+                              title: str,
+                              filepath: pathlib.Path,
+                              d: float,
+                              factory_counts: List[int],
+                              register_sizes: List[int]):
+    data = np.zeros(shape=(len(factory_counts), len(register_sizes)), dtype=np.int32)
+    fig: matplotlib.figure.Figure = plt.figure()
+    colors = plt.get_cmap('tab10')
+    ax: matplotlib.axes.Axes = fig.add_subplot(1, 1, 1)
+    print("#" * len(register_sizes))
+    for i, n in enumerate(register_sizes):
+        print(".", end='')
+        for j, f in enumerate(factory_counts):
+            data[j, i] = min(range(len(adder_set)),
+                             key=lambda k: adder_set[k].vol(n=n, factory_count=f,
+                                                            factory_area=12 * 6 * d**2,
+                                                            factory_period= 165 * d))
+    print()
+    data = data[::-1, :]
+    ax.imshow(data, cmap=colors, vmin=0, vmax=len(colors.colors))
+    ax.set_title(title)
+    fig.set_size_inches(12, 5)
+    ax.set_ylabel(r'Maximum factory count (f)')
+    ax.set_xlabel(r'Register size (n)')
+    yt = [10**k for k in range(20) if factory_counts[0] < 10**k < factory_counts[-1]]
+    xt = [10**k for k in range(20) if register_sizes[0] < 10**k < register_sizes[-1]]
+
+    def logifx(x):
+        return (
+                (math.log(x) - math.log(register_sizes[0]))
+                / (math.log(register_sizes[-1]) - math.log(register_sizes[0]))
+                * data.shape[1]
+        )
+
+    def logify(y):
+        return (
+            data.shape[0] - 1 -
+                (math.log(y) - math.log(factory_counts[0]))
+                / (math.log(factory_counts[-1]) - math.log(factory_counts[0]))
+                * data.shape[0]
+        )
+
+    ax.set_xticks([logifx(x) for x in xt])
+    ax.set_yticks([logify(y) for y in yt])
+    ax.set_xticklabels([str(x) for x in xt])
+    ax.set_yticklabels([str(y) for y in yt])
+
+    ax.legend(
+        handles=[
+            matplotlib.patches.Patch(
+                color=color,
+                label=f"{adder.author} ({adder.year}) {adder.type}".replace('=b', '=best'))
+            for adder, color in zip(adder_set, colors.colors)
+        ],
+        bbox_to_anchor=(1.95, 1),
+        loc='upper right')
+
+    plt.savefig(filepath)
+    print(f"Generated file://{filepath}")
+
+
+def plot_volume_vs_size(adders: List[Adder], out_dir: pathlib.Path):
     adders = sorted(adders, key=lambda adder: (adder.reaction_depth.value(1000000, b=20) + adder.year*20, adder.year, adder.author))
     in_place_adders = [adder for adder in adders if adder.in_place]
     out_of_place_adders = [adder for adder in adders if not adder.in_place]
@@ -333,22 +443,27 @@ def make_phase_diagram(adders: List[Adder]):
     while ns[-1] < max_n:
         ns.append(int(ns[-1] * 2))
     ns[-1] = max_n
-    for kk, adder_set in enumerate((out_of_place_adders, in_place_adders)):
+    for name, adder_set in [('Out-of-place', out_of_place_adders), ('In-place', in_place_adders)]:
         curves = []
         for adder in adder_set:
             volumes = []
             for n in ns:
                 volumes.append(adder.vol(n=n, factory_count=int(math.ceil(n*0.1))))
             curves.append((adder, volumes))
-        fig = plt.figure()
-        ax = fig.add_subplot(1, 1, 1)
+        fig: matplotlib.figure.Figure = plt.figure()
+        ax: matplotlib.axes.Axes = fig.add_subplot(1, 1, 1)
         for c in curves:
             ax.plot(ns, c[1])
+        ax.set_title(f'{name} adder volume vs register size (n) using n/10 factories')
+        ax.set_ylabel(r'Estimated volume (logical qubit $\cdot$ seconds)')
+        ax.set_xlabel(r'Register size')
         ax.set_yscale('log')
         ax.set_xscale('log')
         ax.legend([f"{adder.author} ({adder.year}) {adder.type}".replace('=b', '=best')
                     for adder in adder_set])
-        plt.show()
+        path = str(out_dir / f'{name.lower()}-size-vs-vol.pdf')
+        fig.savefig(path)
+        print(f"Generated file://{path}")
 
 
 def main():
@@ -570,7 +685,7 @@ def main():
             author="Gossett",
             year=1998,
             citation="gossett1998carrysave",
-            type="Pipelined (n summands)",
+            type="Carry Save (avg over n)",
             in_place=False,
             toffolis=SimpleFormula(n=4),
             reaction_depth=SimpleFormula(constant=2),
@@ -630,6 +745,7 @@ def main():
             reaction_depth=SimpleFormula(n=1, O_1=True),
             workspace=SimpleFormula(n=1),
             toffoli_usage=two_block_usage,
+            dominated_in_phase_diagram=True,
         ),
         Adder(
             author="(this paper)",
@@ -641,6 +757,7 @@ def main():
             reaction_depth=SimpleFormula(n=1.5, O_1=True),
             workspace=SimpleFormula(n=1),
             toffoli_usage=two_block_usage.then(two_block_usage_uncompute),
+            dominated_in_phase_diagram=True,
         ),
         Adder(
             author="(this paper)",
@@ -674,6 +791,7 @@ def main():
             reaction_depth=SimpleFormula(sqrt_n=6, lg_n=4, O_1=True),
             workspace=SimpleFormula(n=2, sqrt_n=5, O_1=True),
             toffoli_usage=our_sqrt_usage.then(our_sqrt_usage_uncompute),
+            dominated_in_phase_diagram=True,
         ),
         Adder(
             author="(this paper)",
@@ -685,14 +803,19 @@ def main():
             reaction_depth=SimpleFormula(sqrt_n=3, lg_n=2, O_1=True),
             workspace=SimpleFormula(n=2, sqrt_n=5, O_1=True),
             toffoli_usage=our_sqrt_usage,
+            dominated_in_phase_diagram=True,
         ),
     ]
 
+    out_dir = pathlib.Path(__file__).parent.parent / 'gen'
     comparison_table_tex = make_table(adders)
     print(comparison_table_tex)
-    with open(pathlib.Path(__file__).parent.parent / 'gen/comparison_table.tex', 'w') as f:
+    comp_path = out_dir / 'comparison_table.tex'
+    with open(comp_path, 'w') as f:
         print(comparison_table_tex, file=f)
-    make_phase_diagram(adders)
+    print(f"Generated file://{comp_path}")
+    plot_volume_vs_size(adders, out_dir)
+    plot_phase_diagram(adders, out_dir)
 
 
 if __name__ == '__main__':
