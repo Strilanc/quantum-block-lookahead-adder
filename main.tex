@@ -73,7 +73,7 @@ We estimate the spacetime volume of these adders, and adders from previous work,
 \section{Introduction}
 
 In the classical computing world, low depth adders are everywhere.
-Even the original 8-bit Intel 8008 chip had a carry-lookahead adder \cite{shirriff2020reverseengineer8008}.
+Even the original 8-bit Intel 8008 chip had a carry lookahead adder \cite{shirriff2020reverseengineer8008}.
 But it's not clear if low depth adders will enjoy the same popularity in the world of fault tolerant quantum computation, because of huge implied space overheads from magic state distillation.
 
 The surface code \cite{fowler2012surfacereview} is a leading contender for the error correcting code used by future large scale quantum computers, because it has a high threshold and low connectivity requirements.
@@ -165,7 +165,7 @@ Ultimately this implies that, if we can't dedicate tens of millions of physical 
 Although the example we just gave is in terms of the execution time of a circuit, focusing on just time can be misleading.
 In this paper, we're going to focus on the spacetime volume consumed by a circuit instead.
 This choice is based on the idea that any volume not used for one thing can be repurposed for some other useful task (like magic state distillation or temporary storage).
-The topological nature of surface code computations, which allows for deformations and rotations through spacetime, makes this assumption better than it might seem.
+The topological nature of surface code computations, which allows for deformations and rotations through spacetime, makes this assumption surprisingly robust.
 That being said, beware that there are regimes where focusing on spacetime volume is the wrong thing to do.
 For example, in a world where space is limitless, making magic state factories effectively free, time is king and low depth adders are almost trivially better than ripple carry adders.
 But that is not the parameter regime we are interested in, so we will focus on volume.
@@ -320,16 +320,21 @@ This process is implemented by the \texttt{init\_sum\_using\_blocks} method in t
 In a tiny quantum computer that can barely support a single magic state factory, ripple carry adders will always be best.
 Conversely, in a huge quantum computer where space is too cheap to meter, low depth adders will dominate.
 In this section our goal is to understand the intermediate regime between these two extremes.
-Beware that some architectural parameters can have surprising effects.
-For example, slowing down the physical qubits used by a quantum computer will decrease (not increase!) the effectiveness of low depth adders.
-This happens because architectures with slower physical qubits have a larger ratio $r$ between the reaction time of the control system and the depth of a magic state factory.
+
+Before we discuss our methods, we caution the reader to think carefully when extrapolating our results to other parameter regimes.
+For example, you might expect that using slower physical qubits (e.g. switching from superconducting qubits to ion trap qubits) would increase the need for low depth adders and so this change would favor carry lookahead adders over ripple carry adders.
+Actually, the reverse occurs.
+Architectures with slower physical qubits have a larger ratio $r$ between the reaction time of the control system and the depth of a magic state factory.
 They can do more control system round trips per factory, meaning reaction-limited computation can feed the outputs of more factories into a single serial circuit.
+Basically, slowing down the qubits doesn't slow down the ripple carry adders, because the ripply carry process is mainly limited by the control system's reaction time (until the physical qubits get so slow that even physical measurement is slower than the control system).
+Instead, using slower qubits increases the relative cost of magic state factories.
+So, at least in terms of spacetime volume, slowing down physical qubits favors constructions that use fewer Toffoli gates (such as ripple carry adders).
 
 To compare adders, we started by looking up or computing their Toffoli count, reaction depth, workspace, and Toffoli consumption rates over time.
-The Toffoli count is the number of Toffoli magic states that the circuit would consume.
+These values are listed in \tbl{comparison}.
+The Toffoli count is the number of Toffoli magic states that the circuit consumes when executed.
 The reaction depth is the deepest chain of sequential adaptive measurements that occur in the circuit (keeping in mind that in the surface code every Toffoli gate, AND computation, and AND uncomputation involves an adaptive measurement).
 The workspace is the number of additional logical qubits needed in the abstract circuit model to run the circuit (i.e. not counting logical qubits used for magic state factories or for storing the input/output).
-These values are listed in \tbl{comparison}.
 
 With the adder data collected, we wrote code to estimate the spacetime volume of an adder given a specified reaction time, factory footprint, and factory period.
 The code can be found in the \texttt{vol} method of the \texttt{Adder} class in the ancillary file \texttt{src/comparison\_table.py}.
@@ -354,15 +359,14 @@ We found that our adders have lower spacetime volume than previous low depth add
 However, we also demonstrated that ripply carry adders have the best estimated spacetime volumes for register sizes up to 200 and for maximum factory counts up to 50.
 This is a surprising contrast to the classical world, where carry lookahead adders are used even for 8 bit additions \cite{shirriff2020reverseengineer8008}.
 
-An important type of adder that we didn't consider in this paper is adders that operate on representations of an integer other than 2s complement.
-These adders cannot be used in all situations, but are sometimes the best choice.
-For example, consider that Shor's factoring algorithm \cite{shor1994algorithms} seems to be a perfect candidate for carry lookahead adders because Shor's factoring algorithm perform arithmetic on registers whose sizes are in the thousands.
-However, by adding log-sized ``carry runways" to registers, the addition problem can be split into (an exponentially good approximation of) independent pieces \cite{gidney2019approximate}.
-Also, it's possible to stay in this format while executing Shor's algorithm \cite{gidney2019factor}.
-This means that parallelization of the additions in Shor's algorithm can be done with additive logarithmic overhead in the Toffoli count (via carry runways) instead of constant multiplicative overhead (via carry lookahead).
+An important type of adder that we didn't consider in this paper is adders that operate on representations of an integer other than 2s complement, like Draper's frequency-space adder \cite{draper2000qftaddition}.
+These adders can't be used in all situations, due to format limitations and conversion costs, but they're sometimes the best choice.
+For example, Shor's factoring algorithm \cite{shor1994algorithms} does arithmetic on registers whose sizes are in the thousands, making it a candidate for lookahead adders.
+But, Shor's algorithm is compatible with an integer format that splits the addition problem into (an exponentially good approximation of) independent pieces \cite{gidney2019approximate,gidney2019factor}.
+It's more efficient to apply ripple carry adders to the pieces than to apply lookahead adders to the whole register.
 
-Overall, we believe that a clear conclusion of our work and our numerics is that quantum lookahead adders are rarely the best choice of adder.
-At least, not in our cost model; which we think is representative of potential future quantum computers based on superconducting qubits and the surface code.
+Overall, we believe that a clear conclusion of our numerics is that quantum lookahead adders are rarely the best choice of adder.
+At least, not in the cost model we have chosen.
 There is too much competition from below in the form of ripple carry adders, and from above in the form of other alternatives for parallelization (such as reaction limited computation and carry runways).
 We can only hope that, as theoretical and engineering advances are made, and the projected cost of quantum fault tolerance steadily decreases, hindsight will show that this conclusion was quaintly naive.
 
