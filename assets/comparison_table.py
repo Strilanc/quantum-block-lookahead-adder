@@ -364,7 +364,7 @@ def plot_phase_diagram(adders: List[Adder], out_dir: pathlib.Path):
                               factory_counts=factory_counts,
                               register_sizes=register_sizes)
     plot_phase_diagram_helper(in_place_adders,
-                              "Min-volume out-of-place adder vs size and half-distance factories",
+                              "Min-volume in-place adder vs size and half-distance factories",
                               filepath=out_dir / 'in-place-min-vol-half.pdf',
                               d=0.5,
                               factory_counts=factory_counts,
