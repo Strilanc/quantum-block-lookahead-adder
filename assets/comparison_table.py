@@ -24,6 +24,7 @@ class SimpleFormula:
     sqrt_n: Union[int, float] = 0
     n: Union[int, float] = 0
     n2: Union[int, float] = 0
+    asterisk: str = ''
 
     def __mul__(self, other: Union[int, float]) -> 'SimpleFormula':
         return SimpleFormula(
@@ -36,6 +37,7 @@ class SimpleFormula:
             sqrt_n=self.sqrt_n * other,
             n=self.n * other,
             n2=self.n2 * other,
+            asterisk=self.asterisk,
         )
 
     def is_b_sensitive(self):
@@ -86,6 +88,7 @@ class SimpleFormula:
             return "0"
         result = "$" + " + ".join(terms) + "$"
         result = result.replace('+ -', '- ')
+        result += self.asterisk
         return result
 
 
@@ -309,7 +312,6 @@ def tikz_plot(heights: List[float]):
 
 
 def make_table(adders: List[Adder]) -> str:
-    adders = sorted(adders, key=lambda adder: (adder.year, adder.author, adder.type))
     in_place_adders = [adder for adder in adders if adder.in_place]
     out_of_place_adders = [adder for adder in adders if not adder.in_place]
     in_place_row = 2
@@ -351,7 +353,6 @@ def make_table(adders: List[Adder]) -> str:
 
 
 def plot_phase_diagram(adders: List[Adder], out_dir: pathlib.Path):
-    adders = sorted(adders, key=lambda adder: (adder.year, adder.author, adder.type))
     adders = [adder for adder in adders if not adder.dominated_in_phase_diagram]
     in_place_adders = [adder for adder in adders if adder.in_place]
     out_of_place_adders = [adder for adder in adders if not adder.in_place]
@@ -456,7 +457,6 @@ def plot_phase_diagram_helper(adder_set: List[Adder],
 
 
 def plot_volume_vs_size(adders: List[Adder], out_dir: pathlib.Path):
-    adders = sorted(adders, key=lambda adder: (adder.year, adder.author, adder.type))
     in_place_adders = [adder for adder in adders if adder.in_place]
     out_of_place_adders = [adder for adder in adders if not adder.in_place]
 
@@ -672,10 +672,26 @@ def main():
     mogenson_usage_compute = Tot.sequence(
         # AND together (a_k xor b_k)'s while c-swapping a_k's.
         # (Could be overlapped but are not in the paper.)
-        fold_down(skip_start=1, reps=2),
+        fold_down(reps=2),
         # Restore a_k and uncompute intermediate (a_k xor b_k).
         # (Could be overlapped down to 3 instead of 4. Not done in the paper due to CNOTs counting.)
         fold_down(skip_start=1, reps=4).reversed(),
+    )
+    thapliyal_usage_inplace = Tot.sequence(
+        # Steps 1-4.
+        fold_down().overlap(fold_down(skip_start=1), shift=2),
+        # Steps 5-9.
+        fold_down(skip_start=1).reversed().overlap(fold_down(skip_start=1, scale=0), shift=1),
+        # Steps 10-11.
+        fold_down(skip_start=1).overlap(fold_down(skip_start=1).reversed(), shift=1),
+        # Steps 12-15.
+        fold_down(skip_start=1).reversed().overlap(fold_down(scale=0).reversed(), shift=1),
+    )
+    thapliyal_usage_out_of_place = Tot.sequence(
+        # Steps 1-4.
+        fold_down().overlap(fold_down(skip_start=1), shift=2),
+        # Steps 5-8.
+        fold_down(skip_start=1).reversed().overlap(fold_down(skip_start=1, scale=0), shift=1),
     )
 
     adders = [
@@ -843,7 +859,7 @@ def main():
             in_place=False,
             toffolis=SimpleFormula(n=6, constant=-4) * 2,  # End of section 5.1
             reaction_depth=SimpleFormula(lg_n=6, constant=2) * 2,  # End of section 5.2
-            workspace=SimpleFormula(n=1, lg_n=-1, constant=-1) * 2, # End of section 5.3
+            workspace=SimpleFormula(n=1, lg_n=-1, constant=-1), # End of section 5.3
             toffoli_usage=mogenson_usage_compute,
         ),
         Adder(
@@ -857,7 +873,34 @@ def main():
             workspace=SimpleFormula(n=1, lg_n=-1, constant=-1),  # End of section 5.3
             toffoli_usage=mogenson_usage_compute.then(mogenson_usage_compute.reversed()),
         ),
+        Adder(
+            author="Thapliyal et al",
+            year=2020,
+            citation="thapliyal2020lookahead",
+            type="Carry Lookahead",
+            in_place=False,
+            toffolis=SimpleFormula(n=4),
+            reaction_depth=SimpleFormula(lg_n=2, O_1=True),
+            workspace=SimpleFormula(n=2, asterisk="*"),
+            toffoli_usage=thapliyal_usage_out_of_place,
+        ),
+        Adder(
+            author="Thapliyal et al",
+            year=2020,
+            citation="thapliyal2020lookahead",
+            type="Carry Lookahead",
+            in_place=True,
+            toffolis=SimpleFormula(n=7, asterisk="*"),
+            reaction_depth=SimpleFormula(lg_n=4, O_1=True, asterisk="*"),
+            workspace=SimpleFormula(n=2, asterisk="*"),
+            toffoli_usage=thapliyal_usage_inplace,
+        ),
     ]
+    adders = sorted(adders, key=lambda adder: (
+        adder.author == "(this paper)",
+        adder.year,
+        adder.author,
+        adder.type))
 
     out_dir = pathlib.Path(__file__).parent.parent / 'gen'
     comparison_table_tex = make_table(adders)
