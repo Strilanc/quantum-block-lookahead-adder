@@ -83,6 +83,15 @@ namespace CG {
         return r;
     }
 
+    // Returns int(ceil(log_2(n))).
+    function FloorLg2(n: Int) : Int {
+        mutable r = 0;
+        while (2 <<< r <= n) {
+            set r += 1;
+        }
+        return r;
+    }
+
     // Returns int(ceil(sqrt(n))).
     function CeilSqrt(n: Int) : Int {
         return Ceiling(Sqrt(IntAsDouble(n)));
