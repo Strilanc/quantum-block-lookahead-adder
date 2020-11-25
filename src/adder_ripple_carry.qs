@@ -22,6 +22,11 @@ namespace CG {
     ///     Toffoli Count: n
     ///     Toffoli Count (uncomputing): 0
     ///     where n = Length(a)
+    ///
+    /// Reference:
+    ///     "Halving the cost of quantum addition"
+    ///     Craig Gidney
+    ///     https://arxiv.org/abs/1709.06648
     operation init_sum_using_ripple_carry(
             a: LittleEndian,
             b: LittleEndian,

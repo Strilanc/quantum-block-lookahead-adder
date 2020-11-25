@@ -10,8 +10,8 @@
                 "--project",
                 "${workspaceFolder}/src/adder.csproj",
                 "-s",
-                // "ToffoliSimulator",
-                "ResourcesEstimator",
+                "ToffoliSimulator",
+                // "ResourcesEstimator",
             ],
             "request":"launch",
             "logging": {

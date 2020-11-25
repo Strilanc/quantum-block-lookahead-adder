@@ -7,6 +7,24 @@ namespace CG {
     open Microsoft.Quantum.Math;
     open Microsoft.Quantum.Random;
 
+    operation check_is_zero(qubit: Qubit) : Unit is Adj {
+        body (...) {
+            if (M(qubit) != Zero) {
+                fail "Check failed. M(qubit) != Zero.";
+            }
+        }
+        adjoint (...) {
+            if (M(qubit) != Zero) {
+                fail "Check failed. M(qubit) != Zero.";
+            }
+        }
+    }
+
+    operation is_toffoli_simulator() : Bool {
+        // HACK: magic happens in `quol.cs` native override.
+        return false;
+    }
+
     /// Initializes `target` to equal `a & b`.
     ///
     /// Assumes:
@@ -19,19 +37,26 @@ namespace CG {
     ///     Additional Workspace: 0
     operation init_and(a: Qubit, b: Qubit, target: Qubit) : Unit is Adj {
         body(...) {
+            if (is_toffoli_simulator()) {
+                check_is_zero(target);
+            }
             CCNOT(a, b, target);
         }
         adjoint(...) {
-            // Note: quol.cs overrides for Toffoli simulator.
-            H(target);
-            if (M(target) == One) {
-                CZ(a, b);
+            if (is_toffoli_simulator()) {
+                CCNOT(a, b, target);
+                check_is_zero(target);
+            } else {
+                H(target);
+                if (M(target) == One) {
+                    CZ(a, b);
+                }
             }
         }
     }
 
     // Xors `a` into `target`.
-    operation ApplyXorInPlaceL(a: BigInt, target: LittleEndian) : Unit {
+    operation ApplyXorInPlaceL(a: BigInt, target: LittleEndian) : Unit is Adj {
         for (k in 0..Length(target!)-1) {
             if ((a >>> k) % 2L == 1L) {
                 X(target![k]);
@@ -83,6 +108,16 @@ namespace CG {
         return r;
     }
 
+    function PowersOfTwoBelow(n: Int) : Int[] {
+        mutable result = new Int[0];
+        mutable k = 1;
+        while (k < n) {
+            set result += [k];
+            set k <<<= 1;
+        }
+        return result;
+    }
+
     // Returns int(ceil(log_2(n))).
     function FloorLg2(n: Int) : Int {
         mutable r = 0;
@@ -105,6 +140,16 @@ namespace CG {
             if (DrawRandomBool(0.5)) {
                 set r += 1L;
             }
+        }
+        return r;
+    }
+
+    function PowerOfTwoness(n: Int) : Int {
+        mutable k = n;
+        mutable r = 0;
+        while (k != 0 and k % 2 == 0) {
+            set k >>>= 1;
+            set r += 1;
         }
         return r;
     }

@@ -5,23 +5,16 @@ using Microsoft.Quantum.Simulation.Core;
 using Microsoft.Quantum.Simulation.Simulators;
 
 namespace CG {
-    public partial class init_and {
-        public class Native : init_and {
-            private bool use_classical_adjoint;
+    public partial class is_toffoli_simulator {
+        public class Native : is_toffoli_simulator {
+            private Func<QVoid, bool> _body;
 
             public Native(IOperationFactory m) : base(m) {
-                use_classical_adjoint = m is ToffoliSimulator;
+                var b = m is ToffoliSimulator;
+                _body = args => b;
             }
 
-            public override Func<(Qubit, Qubit, Qubit), QVoid> __AdjointBody__ {
-                get {
-                    if (use_classical_adjoint) {
-                        return base.__Body__;
-                    }
-                    return base.__AdjointBody__;
-                }
-            }
-
+            public override Func<QVoid, bool> __Body__ => _body;
         }
     }
 }

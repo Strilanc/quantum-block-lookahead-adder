@@ -20,8 +20,9 @@ namespace CG {
     ///     Toffoli Count: 3*n - 2*b + 5*n/b + O(1)
     ///     Toffoli Count (uncomputing): 2*n - 2*b + 5*n/b + O(1)
     ///     Reaction Depth: 3*b + 4*lg(n/b) + O(1)
-    ///     Additional Workspace: 2*n + 5*n/b + O(1)
-    ///     where n = Length(a), b = block_size
+    ///     Workspace: 2*n + 3*n/b + O(1)
+    ///     where n = Length(a)
+    ///     where b = block_size
     operation init_sum_using_blocks(
             block_size: Int,
             a: LittleEndian,
@@ -45,7 +46,7 @@ namespace CG {
     ///     Toffoli Count: 3*n + 3*sqrt(n) + O(1)
     ///     Toffoli Count (uncomputing): 2*n + 3*sqrt(n) + O(1)
     ///     Reaction Depth: 3*sqrt(n) + 2*lg(n) + O(1)
-    ///     Additional Workspace: 2*n + 5*sqrt(n) + O(1)
+    ///     Workspace: 2*n + 3*sqrt(n) + O(1)
     ///     where n = Length(a)
     operation init_sum_using_square_root_blocks(
             a: LittleEndian,
@@ -55,6 +56,13 @@ namespace CG {
         init_sum_using_blocks(block_size, a, b, out_c);
     }
 
+    /// Budget:
+    ///     Toffoli Count: 3*n - 2*b + 5*n/b + O(1)
+    ///     Toffoli Count (uncomputing): 2*n - 2*b + 5*n/b + O(1)
+    ///     Reaction Depth: 3*b + 4*lg(n/b) + O(1)
+    ///     Workspace: 2*n + 3*n/b + O(1)
+    ///     where n = Length(a)
+    ///     where b = block_size
     operation _init_sum_using_blocks_helper(
             block_size: Int,
             a: LittleEndian,
@@ -66,10 +74,9 @@ namespace CG {
         let n = Length(a!);
         let m = Length(a_blocks);
 
-        using ((carries_0, carries_1, propagated_carries, mux_0, mux_1) = (
+        using ((carries_0, carries_1, mux_0, mux_1) = (
                 Qubit[m], 
                 Qubit[m], 
-                Qubit[m],
                 Qubit[n - block_size], 
                 Qubit[n - block_size])) {
             let mux_blocks_0 = [new Qubit[0]] + Chunks(block_size, mux_0);
@@ -89,8 +96,8 @@ namespace CG {
                 // Compute carry-in and not-carry-in cases in parallel.
                 for (k in 1..m-1) {
                     let stop = k == m - 1 ? -1 | 0;
-                    let m0 = mux_blocks_0[k] + [carries_0[k]][...stop];
-                    let m1 = mux_blocks_1[k] + [carries_1[k]][...stop];
+                    mutable m0 = mux_blocks_0[k] + [carries_0[k]][...stop];
+                    mutable m1 = mux_blocks_1[k] + [carries_1[k]][...stop];
                     for (t in [m0, m1]) {
                         init_sum_using_ripple_carry(
                             LittleEndian(a_blocks[k]),
@@ -105,18 +112,20 @@ namespace CG {
                 }
 
                 // Determine propagated carries using carry-lookahead.
-                _init_propagated_carries(carries_0, carries_1, propagated_carries);
+                let gen = carries_0;
+                let prop = carries_1;
+                _prop_gen(prop[1...] + prop[...0], gen);
             } apply {
                 for (k in 1..m-1) {
                     init_choose(
-                        propagated_carries[k], 
+                        carries_0[k - 1],
                         mux_blocks_0[k], 
                         mux_blocks_1[k], 
                         c_blocks[k]);
                 }
             }
 
-            // Uncompute c_low_carry.
+            // Uncompute carries_0[0] while keeping the rest of the sum.
             Adjoint init_full_adder_step(
                 a_blocks[0][block_size-1],
                 b_blocks[0][block_size-1],

@@ -42,6 +42,21 @@
     }
 
     @Test("ToffoliSimulator")
+    operation test_PowerOfTwoness() : Unit {
+        assert(PowerOfTwoness(0) == 0);
+        assert(PowerOfTwoness(1) == 0);
+        assert(PowerOfTwoness(2) == 1);
+        assert(PowerOfTwoness(3) == 0);
+        assert(PowerOfTwoness(4) == 2);
+        assert(PowerOfTwoness(5) == 0);
+        assert(PowerOfTwoness(6) == 1);
+        assert(PowerOfTwoness(7) == 0);
+        assert(PowerOfTwoness(8) == 3);
+        assert(PowerOfTwoness(9) == 0);
+        assert(PowerOfTwoness(10) == 1);
+    }
+
+    @Test("ToffoliSimulator")
     operation test_CeilSqrt() : Unit {
         assert(CeilSqrt(0) == 0);
         assert(CeilSqrt(1) == 1);

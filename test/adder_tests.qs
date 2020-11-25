@@ -34,6 +34,28 @@
     }
 
     @Test("ToffoliSimulator")
+    operation test_prop_gen() : Unit {
+        let n = 19;
+        let a = 0b0000010001000000100;
+        let b = 0b0001110001000100000;
+        let e = 0b0011110011000000100L;
+        using ((qg, qp) = (Qubit[n], Qubit[n])) {
+            let g = LittleEndian(qg);
+            let p = LittleEndian(qp);
+            within {
+                ApplyXorInPlace(a, g);
+                ApplyXorInPlace(b, p);
+                _prop_gen(p!, g!);
+            } apply {
+                let m = MeasureLE(g);
+                if (m != e) {
+                    fail $"{m} != {e}";
+                }
+            }
+        }
+    }
+
+    @Test("ToffoliSimulator")
     operation test_init_sum_using_ripple_carry() : Unit {
         FuzzTestInitAddition(init_sum_using_ripple_carry);
     }

@@ -6,7 +6,7 @@ namespace CG {
     open Microsoft.Quantum.Intrinsic;
     open Microsoft.Quantum.Random;
 
-    /// Performs target += input.
+    /// Performs `target += input` in logarithmic depth.
     ///
     /// Assumes:
     ///     Length(target) == Length(input)
@@ -14,15 +14,21 @@ namespace CG {
     /// Budget:
     ///     Toffoli Count: 7*n
     ///     Reaction Depth: 4*lg(n) + O(1)
-    ///     Additional Workspace: 4*n + O(1)
+    ///     Workspace: 2*n + O(1)
     ///     where n = Length(target)
+    ///
+    /// Reference:
+    ///     "T-count and Qubit Optimized Quantum Circuit Designs of Carry
+    ///          Lookahead Adder"
+    ///     Himanshu Thapliyal, Edgard Muñoz-Coreas, Vladislav Khalus
+    ///     https://arxiv.org/abs/2004.01826
     operation add_into_using_carry_lookahead(
             input: LittleEndian,
             target: LittleEndian) : Unit is Adj {
         add_into_using(init_sum_using_carry_lookahead, input, target);
     }
 
-    /// Initializes out_c to equal a+b, in logarithmic depth.
+    /// Performs `out_c := a+b` in logarithmic depth.
     ///
     /// Assumes:
     ///     Length(a) == Length(b)
@@ -33,189 +39,126 @@ namespace CG {
     ///     Toffoli Count: 4*n
     ///     Toffoli Count (uncomputing): 3*n
     ///     Reaction Depth: 2*lg(n) + O(1)
-    ///     Additional Workspace: 3*n + O(1)
+    ///     Workspace: n + O(1)
     ///     where n = Length(a)
+    ///
+    /// Reference:
+    ///     "T-count and Qubit Optimized Quantum Circuit Designs of Carry
+    ///          Lookahead Adder"
+    ///     Himanshu Thapliyal, Edgard Muñoz-Coreas, Vladislav Khalus
+    ///     https://arxiv.org/abs/2004.01826
     operation init_sum_using_carry_lookahead(
             a: LittleEndian,
             b: LittleEndian,
             out_c: LittleEndian) : Unit is Adj {
         let n = Length(a!);
-        using (unit_carries = Qubit[n]) {
-            within {
-                for (k in 0..(n-1)) {
-                    // Init unit length range carry data.
-                    init_and(a![k], b![k], unit_carries[k]);
-                    // Init unit length range threshold data (into b).
-                    CNOT(a![k], b![k]);
-                }
-            } apply {
-                _init_propagated_carries(unit_carries, b!, out_c!);
-            }
 
-            for (k in 0..(n-1)) {
-                CNOT(a![k], out_c![k]);
-                CNOT(b![k], out_c![k]);
+        // Create initial `generate` and `propagate` values.
+        for (k in 0..n-1) {
+            if (k + 1 < Length(out_c!)) {
+                init_and(a![k], b![k], out_c![k + 1]);
             }
+            CNOT(a![k], b![k]);
+        }
+
+        // Fuse `generate` and `propagate` values into the final carries.
+        _prop_gen(b!, out_c!);
+
+        // Finish off the sum and restore b.
+        for (k in 0..n-1) {
+            CNOT(b![k], out_c![k]);
+            CNOT(a![k], b![k]);
         }
     }
 
-    /// Propagates local carries and thresholds into final carries in logarithmic depth.
+    /// Finds the `propagate` qubit for the given range.
+    function _range_p_storage(ps: Qubit[], range: Range) : Qubit {
+        let start = RangeStart(range);
+        let end = RangeEnd(range);
+        if (end == start + 1) {
+            return ps[start];
+        }
+        return ps[(Length(ps) + start + end) / 2];
+    }
+
+    /// Finds the `generate` qubit for the given range.
+    /// Note qubits are re-used for multiple ranges.
+    function _range_g_storage(out_c: Qubit[], range: Range) : Qubit {
+        let start = RangeStart(range);
+        let end = RangeEnd(range);
+        if (end == start + 1) {
+            return out_c[end];
+        }
+        mutable i = (start + end) / 2;
+        for (v in PowerOfTwoness(i)-1..-1..0) {
+            let m = 1 <<< v;
+            if (i + m < Length(out_c)) {
+                set i += m;
+            }
+        }
+        return out_c[i + 1];
+    }
+
+    /// Propagates local `generate` values into global `generate` values.
     ///
-    /// Args:
-    ///     unit_carries: Whether or not each bit position produced a carry. The bitwise AND of
-    ///         the two inputs to add.
-    ///     unit_thresholds: Whether or not each bit position will produce a new carry if a
-    ///         carry propagates into that position. The bitwise XOR of the two inputs to add.
-    ///     out_propagated_carries: A zero'd register to write the final fully-propagated
-    ///         carry data into. This value will end up equal to A xor B xor (A + B).
+    /// Example:
+    ///       propagates = ...111...1...1.....
+    ///      mut_gs (in) = .....1...1......1..
+    ///     mut_gs (out) = ..1111..11......1..
+    ///
+    /// Arguments:
+    ///     propagates: Local `propagate` values. If the bit at index i is set,
+    ///         then a `generate` signal at bit index i should propagate up to
+    ///         bit index i + 1.
+    ///     mut_gs: Initial local `generate` values, which will be mutated into
+    ///         the global propagated `generate` values. If the bit at index i
+    ///         is set at input time, that means the carry-out of the range
+    ///         i-1..i is 1 regardless of its carry-in. If the bit at index i
+    ///         is set at output time, that means the carry-out of the range
+    ///         0..i is set regarldess of its carry-in.
     ///
     /// Assumes:
-    ///     Length(unit_carries) == Length(unit_thresholds)
-    ///     Length(unit_carries) == Length(out_propagated_carries)
-    ///     MeasureLE(out_propagated_carries) == 0L
+    ///     Length(mut_gs) == Length(propagates)
+    ///     ((Measure(propagates) <<< 1) &&& Measure(mut_gs)) == 0
     ///
     /// Budget:
-    ///     Additional Workspace: 2*n + O(1)
-    ///     Reaction Depth: 2*lg(n) + O(1)
     ///     Toffoli Count: 3*n
-    ///     Toffoli Count (uncomputing): 2*n
-    ///     where n = Length(unit_carries)
-    operation _init_propagated_carries(
-            unit_carries: Qubit[],
-            unit_thresholds: Qubit[],
-            out_propagated_carries: Qubit[]) : Unit is Adj {
-        let n = Length(unit_carries);
-        using (centered_thresholds = Qubit[n]) {
-            using (centered_carries = Qubit[n]) {
-                within {
-                    // Note: the uncomputation of this block can be almost entirely overlapped
-                    // with the apply body. This lowers the reaction depth by ~33%.
-                    _init_centered_range_data(
-                        unit_carries,
-                        unit_thresholds,
-                        centered_carries,
-                        centered_thresholds);
-                } apply {
-                    for (t in CeilLg2(n)-1..-1..0) {
-                        let step = 1 <<< t;
-                        for (a in 0..step*2..n-step-1) {
-                            let b = a + step;
-                            let c_a2b = _mux(a, b, unit_carries, centered_carries);
-                            let t_a2b = _mux(a, b, unit_thresholds, centered_thresholds);
-                            init_and(t_a2b, out_propagated_carries[a], out_propagated_carries[b]);
-                            CNOT(c_a2b, out_propagated_carries[b]);
-                        }
+    ///     Reaction Depth: 2*lg(n) + O(1)
+    ///     Workspace: n
+    ///     where n = Length(mut_gs)
+    ///
+    /// Reference:
+    ///     "T-count and Qubit Optimized Quantum Circuit Designs of Carry
+    ///          Lookahead Adder"
+    ///     Himanshu Thapliyal, Edgard Muñoz-Coreas, Vladislav Khalus
+    ///     https://arxiv.org/abs/2004.01826
+    operation _prop_gen(propagates: Qubit[], mut_gs: Qubit[]) : Unit is Adj {
+        let n = Length(propagates);
+        using (workspace = Qubit[n]) {
+            let p = _range_p_storage(propagates + workspace, _);
+            let g = _range_g_storage(mut_gs, _);
+            for (step in PowersOfTwoBelow(n)) {
+                for (i in 0..2*step..n) {
+                    let j = i + step;
+                    let k = j + step;
+                    if (k < n) {
+                        init_and(p(i..j), p(j..k), p(i..k));
+                        CCNOT(g(i..j), p(j..k), g(i..k));
+                    }
+                }
+            }
+            for (step in (PowersOfTwoBelow(n))[...-1...]) {
+                for (i in 0..2*step..n) {
+                    let j = i + step;
+                    let k = j + step;
+                    if (k < n) {
+                        Adjoint init_and(p(i..j), p(j..k), p(i..k));
+                    }
+                    if (j < n) {
+                        CCNOT(g(i-1..i), p(i..j), g(i..j));
                     }
                 }
             }
         }
-    }
-
-    /// Initializes range data about centered ranges.
-    /// (See definitions in documentation of _mux)
-    ///
-    /// Args:
-    ///     unit_carries: Carry data for unit length ranges.
-    ///     unit_thresholds: Threshold data for unit length ranges.
-    ///     out_centered_carries: Location to store carry data for centered ranges.
-    ///     out_centered_thresholds: Location to store threshold data for centered ranges.
-    ///
-    /// Assumes:
-    ///     Length(unit_carries) == Length(unit_thresholds)
-    ///     Length(unit_carries) == Length(out_centered_carries)
-    ///     Length(unit_carries) == Length(out_centered_thresholds)
-    ///     MeasureLE(out_centered_carries) == 0L
-    ///     MeasureLE(out_centered_thresholds) == 0L
-    ///
-    /// Budget:
-    ///     Additional Workspace: O(1)
-    ///     Reaction Depth: lg(n)
-    ///     Toffoli Count: 2*n
-    ///     Toffoli Count (uncomputing): 0
-    ///     where n = Length(unit_carries)
-    operation _init_centered_range_data(
-            unit_carries: Qubit[],
-            unit_thresholds: Qubit[],
-            out_centered_carries: Qubit[],
-            out_centered_thresholds: Qubit[]) : Unit is Adj {
-        let n = Length(unit_thresholds);
-        let p = CeilLg2(n);
-        for (t in 0..CeilLg2(n)-2) {
-            let step = 1 <<< t;
-            for (a in 0..step * 2..n-step * 2 - 1) {
-                _init_centered_datum_by_fusing(
-                    a,
-                    a + step,
-                    a + step * 2,
-                    unit_carries,
-                    unit_thresholds,
-                    out_centered_carries,
-                    out_centered_thresholds);
-            }
-        }
-    }
-
-    /// Combines range data about `a..b` and `b..c` to create range data about `a..c`.
-    ///
-    /// Args:
-    ///     a: The start of the first range.
-    ///     b: The end of the first range and also the start of the second range.
-    ///     c: The end of the second range.
-    ///     unit_carries: Carry data for unit length ranges.
-    ///     unit_thresholds: Threshold data for unit length ranges.
-    ///     centered_carries: Carry data for centered ranges.
-    ///     centered_thresholds: Threshold data for centered ranges.
-    ///
-    /// Assumes:
-    ///     Length(initial) == Length(mid)
-    ///     a..b is a unit length range or a centered range
-    ///     b..c is a unit length range or a centered range
-    ///     a..c is a centered range
-    ///     (See definitions in documentation of _mux)
-    ///
-    /// Budget:
-    ///     Additional Workspace: O(1)
-    ///     Reaction Depth: 1
-    ///     Toffoli Count: 2
-    ///     Toffoli Count (uncomputing): 0
-    operation _init_centered_datum_by_fusing(
-            a: Int,
-            b: Int,
-            c: Int,
-            unit_carries: Qubit[],
-            unit_thresholds: Qubit[],
-            centered_carries: Qubit[],
-            centered_thresholds: Qubit[]) : Unit is Adj {
-        let c_a2b = _mux(a, b, unit_carries, centered_carries);
-        let t_a2b = _mux(a, b, unit_thresholds, centered_thresholds);
-        let c_b2c = _mux(b, c, unit_carries, centered_carries);
-        let t_b2c = _mux(b, c, unit_thresholds, centered_thresholds);
-        init_and(t_b2c, c_a2b, centered_carries[b]);
-        init_and(t_b2c, t_a2b, centered_thresholds[b]);
-        CNOT(c_b2c, centered_carries[b]);
-    }
-
-    /// Helper method for reading data about a range.
-    ///
-    /// Definitions:
-    ///     Unit length range: A range of the form `a..a+1`.
-    ///     Centered range: A range of the form `m-s..m+s` where `s` is the largest
-    ///         power of 2 that divides `m`. In arrays, data about the centered range
-    ///         `m-s..m+s` is stored at offset `m`.
-    ///
-    /// Args:
-    ///     start: The inclusive start of the range.
-    ///     end: The inclusive end of the range.
-    ///     unit_data: Data for unit length ranges.
-    ///     centered_data: Data for centered ranges.
-    ///
-    /// Assumes:
-    ///     Length(initial) == Length(mid)
-    ///     start..end is a unit length range or a centered range.
-    function _mux(start: Int, end: Int, unit_data: Qubit[], centered_data: Qubit[]) : Qubit {
-        if (end == start + 1) {
-            return unit_data[start];
-        }
-        return centered_data[(start + end) / 2];
     }
 }

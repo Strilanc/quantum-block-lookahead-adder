@@ -505,32 +505,6 @@ def main():
             shift=1,
         ),
     )
-    our_lookahead_usage = Tot.sequence(
-        # Initial carries.
-        hold(height=SimpleFormula(n=1), duration=1),
-        # Grow centered ranges.
-        fold_down(scale=2, skip_start=1),
-        # Spread zero-rooted ranges.
-        fold_down(skip_start=1).reversed().overlap(
-            # Uncompute centered ranges.
-            fold_down(scale=0, skip_start=1).reversed(),
-            shift=1,
-        ),
-    )
-    our_lookahead_usage_uncompute = Tot.sequence(
-        # Initial carries.
-        hold(height=SimpleFormula(n=1), duration=1),
-        # Grow centered ranges.
-        fold_down(scale=0, skip_start=1),
-        # Spread zero-rooted ranges. (0 cost when uncomputing)
-        fold_down(scale=0, skip_start=1).reversed(),
-        # Spread zero-rooted ranges.
-        fold_down(skip_start=1).reversed().overlap(
-            # Uncompute centered ranges.
-            fold_down(scale=2, skip_start=1).reversed(),
-            shift=1,
-        ),
-    ).reversed()
     our_lookahead_usage_block_spread = Tot.sequence(
         # Grow centered ranges.
         fold_down(scale=2, skip_start=1, width=SimpleFormula(b=1)),
@@ -677,22 +651,13 @@ def main():
         # (Could be overlapped down to 3 instead of 4. Not done in the paper due to CNOTs counting.)
         fold_down(skip_start=1, reps=4).reversed(),
     )
-    thapliyal_usage_inplace = Tot.sequence(
-        # Steps 1-4.
-        fold_down().overlap(fold_down(skip_start=1), shift=2),
-        # Steps 5-9.
-        fold_down(skip_start=1).reversed().overlap(fold_down(skip_start=1, scale=0), shift=1),
-        # Steps 10-11.
-        fold_down(skip_start=1).overlap(fold_down(skip_start=1).reversed(), shift=1),
-        # Steps 12-15.
-        fold_down(skip_start=1).reversed().overlap(fold_down(scale=0).reversed(), shift=1),
-    )
     thapliyal_usage_out_of_place = Tot.sequence(
-        # Steps 1-4.
-        fold_down().overlap(fold_down(skip_start=1), shift=2),
-        # Steps 5-8.
-        fold_down(skip_start=1).reversed().overlap(fold_down(skip_start=1, scale=0), shift=1),
+        hold(duration=1, height=SimpleFormula(n=1)),
+        fold_down(skip_start=1).overlap(fold_down(skip_start=1), shift=1),
+        fold_down(skip_start=1, scale=0).overlap(fold_down(skip_start=1), shift=1).reversed(),
     )
+    thapliyal_usage_inplace = thapliyal_usage_out_of_place.then(
+        thapliyal_usage_out_of_place.reversed())
 
     adders = [
         Adder(
@@ -767,7 +732,7 @@ def main():
             in_place=False,
             toffolis=SimpleFormula(n=3, b=-2, n_over_b=5, O_1=True),
             reaction_depth=SimpleFormula(b=3, lg_n_over_b=4, O_1=True),
-            workspace=SimpleFormula(n=2, n_over_b=5, O_1=True),
+            workspace=SimpleFormula(n=2, n_over_b=3, O_1=True),
             toffoli_usage=our_block_usage
         ),
         Adder(
@@ -778,55 +743,33 @@ def main():
             in_place=True,
             toffolis=SimpleFormula(n=5, b=-4, n_over_b=10, O_1=True),
             reaction_depth=SimpleFormula(b=6, lg_n_over_b=8, O_1=True),
-            workspace=SimpleFormula(n=2, n_over_b=5, O_1=True),
+            workspace=SimpleFormula(n=2, n_over_b=3, O_1=True),
             toffoli_usage=our_block_usage.then(our_block_usage_uncompute),
         ),
-        Adder(
-            author="(this paper)",
-            citation=None,
-            year=2020,
-            type="Blocksize=$n/2$",
-            in_place=False,
-            toffolis=SimpleFormula(n=2),
-            reaction_depth=SimpleFormula(n=1, O_1=True),
-            workspace=SimpleFormula(n=1),
-            toffoli_usage=two_block_usage,
-            dominated_in_phase_diagram=True,
-        ),
-        Adder(
-            author="(this paper)",
-            citation=None,
-            year=2020,
-            type="Blocksize=$n/2$",
-            in_place=True,
-            toffolis=SimpleFormula(n=3),
-            reaction_depth=SimpleFormula(n=1.5, O_1=True),
-            workspace=SimpleFormula(n=1),
-            toffoli_usage=two_block_usage.then(two_block_usage_uncompute),
-            dominated_in_phase_diagram=True,
-        ),
-        Adder(
-            author="(this paper)",
-            citation=None,
-            year=2020,
-            type="Carry Lookahead",
-            in_place=True,
-            toffolis=SimpleFormula(n=7),
-            reaction_depth=SimpleFormula(lg_n=4, O_1=True),
-            workspace=SimpleFormula(n=4, O_1=True),
-            toffoli_usage=our_lookahead_usage.then(our_lookahead_usage_uncompute),
-        ),
-        Adder(
-            author="(this paper)",
-            citation=None,
-            year=2020,
-            type="Carry Lookahead",
-            in_place=False,
-            toffolis=SimpleFormula(n=4),
-            reaction_depth=SimpleFormula(lg_n=2, O_1=True),
-            workspace=SimpleFormula(n=3, O_1=True),
-            toffoli_usage=our_lookahead_usage,
-        ),
+        # Adder(
+        #     author="(this paper)",
+        #     citation=None,
+        #     year=2020,
+        #     type="Blocksize=$n/2$",
+        #     in_place=False,
+        #     toffolis=SimpleFormula(n=2),
+        #     reaction_depth=SimpleFormula(n=1, O_1=True),
+        #     workspace=SimpleFormula(n=1),
+        #     toffoli_usage=two_block_usage,
+        #     dominated_in_phase_diagram=True,
+        # ),
+        # Adder(
+        #     author="(this paper)",
+        #     citation=None,
+        #     year=2020,
+        #     type="Blocksize=$n/2$",
+        #     in_place=True,
+        #     toffolis=SimpleFormula(n=3),
+        #     reaction_depth=SimpleFormula(n=1.5, O_1=True),
+        #     workspace=SimpleFormula(n=1),
+        #     toffoli_usage=two_block_usage.then(two_block_usage_uncompute),
+        #     dominated_in_phase_diagram=True,
+        # ),
         Adder(
             author="(this paper)",
             citation=None,
@@ -835,7 +778,7 @@ def main():
             in_place=True,
             toffolis=SimpleFormula(n=5, sqrt_n=6, O_1=True),
             reaction_depth=SimpleFormula(sqrt_n=6, lg_n=4, O_1=True),
-            workspace=SimpleFormula(n=2, sqrt_n=5, O_1=True),
+            workspace=SimpleFormula(n=2, sqrt_n=3, O_1=True),
             toffoli_usage=our_sqrt_usage.then(our_sqrt_usage_uncompute),
             dominated_in_phase_diagram=True,
         ),
@@ -847,7 +790,7 @@ def main():
             in_place=False,
             toffolis=SimpleFormula(n=3, sqrt_n=3, O_1=True),
             reaction_depth=SimpleFormula(sqrt_n=3, lg_n=2, O_1=True),
-            workspace=SimpleFormula(n=2, sqrt_n=5, O_1=True),
+            workspace=SimpleFormula(n=2, sqrt_n=3, O_1=True),
             toffoli_usage=our_sqrt_usage,
             dominated_in_phase_diagram=True,
         ),
