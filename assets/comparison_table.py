@@ -824,7 +824,7 @@ def main():
             in_place=False,
             toffolis=SimpleFormula(n=4),
             reaction_depth=SimpleFormula(lg_n=2, O_1=True),
-            workspace=SimpleFormula(n=2, asterisk="*"),
+            workspace=SimpleFormula(n=1, asterisk="*"),
             toffoli_usage=thapliyal_usage_out_of_place,
         ),
         Adder(
