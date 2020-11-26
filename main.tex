@@ -13,6 +13,7 @@
 \usepackage[utf8]{inputenc}
 \usepackage{capt-of}
 \usepackage[numbers]{natbib}
+
 \usetikzlibrary{decorations.pathreplacing}
 
 % Boo Roman Numerals.
@@ -86,8 +87,9 @@ showstringspaces=false
 
 \begin{abstract}
 We improve the Toffoli count of quantum lookahead adders, and analyze how their spacetime cost reacts to having a limited number of magic state factories.
-We present an out-of-place carry lookahead adder with a Toffoli count of $4n$ (vs $5n$ in previous work by Draper et al) and a corresponding in-place Toffoli count of $7n$ (vs $10n$ in previous work by Draper et al).
-We also present a block lookahead adder, that operates across blocks of bits of size $b$ and reduces the Toffoli count to $3n + 5n/b$ out-of-place and $5n + 5n/b$ in-place at the cost of the reaction depth depending linearly on $b$.
+We present a block lookahead adder that parallelizes across blocks of bits of size $b$, instead of over all bits.
+The block lookahead adder achieves a Toffoli count of $3n + 5n/b$ for out-of-place addition (vs $4n$ in previous work by Thapliyal et al) and $5n + 5n/b$ for in-place addition (vs $7n$ in previous work by Thapliyal et al).
+The tradeoff is that the reaction depth of these circuits depends linearly on $b$.
 We estimate the spacetime volume of these adders, and adders from previous work, for various register sizes and factory counts under plausible assumptions for a large scale quantum computer based on the surface code and superconducting qubits.
 \end{abstract}
 
@@ -192,8 +194,8 @@ For example, in a world where space is limitless, making magic state factories e
 But that is not the parameter regime we are interested in, so we will focus on volume.
 
 Our goal in this paper is to reduce and quantify the spacetime overhead implicit in using a low depth adder.
-We start in \sec{lookahead} by constructing a new carry lookahead adder based on quantizing the classical Brent-Kung adder \cite{brent1982adder} and on using temporary ANDs \cite{gidney2018halving}.
-Then, in \sec{block}, we sacrifice parallelism to further lower the Toffoli overhead.
+We start in \sec{lookahead} by constructing a carry lookahead adder based on quantizing the classical Brent-Kung adder \cite{brent1982adder} and on using temporary ANDs \cite{gidney2018halving}.
+Then, in \sec{block}, we sacrifice some parallelism to lower the Toffoli overhead.
 Instead of operating on every bit in parallel, we split the problem into blocks and operate on the blocks in parallel.
 In \sec{estimate}, we estimate the spacetime volume of our adders and previous adders in order to understand the parameter regimes where various adders dominate.
 Finally, in \sec{conclusion}, we summarize our results and give some additional caveats.
@@ -255,6 +257,7 @@ After $\lg n + O(1)$ rounds we know all of the carry-from-zero values, and can c
 All that's left to do is to uncompute the intermediate carry values.
 
 This process is implemented by the \texttt{init\_sum\_using\_carry\_lookahead} method in the \\\texttt{src/adder\_lookahead.qs} ancillary file.
+Source code is also included in \app{carryadder}.
 
 The method as described has a Toffoli cost of $4n$.
 This can be somewhat easily seen in the Q\# code, because the only Toffoli operations are \texttt{init\_and} operations initializing the contents of four registers each of size $n$.
@@ -333,6 +336,7 @@ The number of work qubits is also lower when $b > 5$.
 The tradeoff is that the depth now depends linearly on $b$, because of the ripple carry adders used to compute (and uncompute) the initial block carry values.
 
 This process is implemented by the \texttt{init\_sum\_using\_blocks} method in the \\\texttt{src/adder\_blocks.qs} ancillary file.
+Source code is also included in \app{blockadder}.
 
 
 \section{Comparison}
@@ -396,7 +400,7 @@ We can only hope that, as theoretical and engineering advances are made, and the
 
 \appendix
 
-\section{Corrections in Table}
+\section{Corrections in Table 1}
 \label{app:correction}
 
 It was reported in \cite{oonishi2020efficient} that the T count of the T-optimized in-place adder in \cite{thapliyal2020lookahead} was reported incorrectly.
@@ -432,12 +436,13 @@ The total number of Toffoli gates and AND computations in these steps (i.e. the 
 The reaction depth is $4 \lg n + O(1)$.
 Maximum workspace occurs during steps 4 and 11, when there are $2n$ ANDs not uncomputed.
 If using T states to perform Toffolis (instead of Toffoli states), there would be an additional $n/2$ work qubits during these steps (because there are up to $n/2$ simultaneous Toffolis occurring).
-In this paper we are assuming Toffoli states are used, we already account for the cost of these states as part of the cost of distillation, so we don't count the $n/2$ work qubits.
+In this paper we are assuming Toffoli states are used, not T states, and we account for the cost of applying Toffoli states as part of the cost of distillation, so we don't count the $n/2$ qubits as work qubits.
 
 Since we are using a different definition of workspace, we also checked the workspace of the T-optimized out-of-place adder in \cite{thapliyal2020lookahead}.
 It was also $2n$, by our definition.
 
 \section{Q\# Source for Carry Lookahead Adder}
+\label{app:carryadder}
 
 The following source code is also available (in a slightly different form) as a Visual Studio Code project in the ancillary folder \texttt{src}.
 If the .net SDK is installed, example code can be run via ``\texttt{dotnet run --project src/adder.csproj}" and the adder code can be unit tested by running ``\texttt{dotnet test test/tests.csproj}".
@@ -683,6 +688,7 @@ namespace Adder {
 \end{qsharp}
 
 \section{Q\# Source for Block Lookahead Adder}
+\label{app:blockadder}
 
 Note: this soure code must be in the same project as the source code above.
 
