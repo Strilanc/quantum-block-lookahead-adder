@@ -1,4 +1,4 @@
-namespace CG {
+namespace BlockAdder {
     open Microsoft.Quantum.Arrays;
     open Microsoft.Quantum.Arithmetic;
     open Microsoft.Quantum.Bitwise;
@@ -8,7 +8,7 @@ namespace CG {
     open Microsoft.Quantum.Math;
     open Microsoft.Quantum.Random;
 
-    /// Initializes out_c to equal a+b, in blocksize + log(n/block_size) depth.
+    /// Perform `out_c := a+b` in O(block_size + lg(n)) depth.
     ///
     /// Assumes:
     ///     blocksize > 0 or Length(a) == 0
@@ -18,8 +18,8 @@ namespace CG {
     ///
     /// Budget:
     ///     Toffoli Count: 3*n - 2*b + 5*n/b + O(1)
-    ///     Toffoli Count (uncomputing): 2*n - 2*b + 5*n/b + O(1)
-    ///     Reaction Depth: 3*b + 4*lg(n/b) + O(1)
+    ///     Toffoli Count (uncomputing): 2*n - 2*b + 3*n/b + O(1)
+    ///     Reaction Depth: 3*b + 2*lg(n/b) + O(1)
     ///     Workspace: 2*n + 3*n/b + O(1)
     ///     where n = Length(a)
     ///     where b = block_size
@@ -35,7 +35,7 @@ namespace CG {
         }
     }
 
-    /// Initializes out_c to equal a+b, in blocksize + log(n/block_size) depth.
+    /// Perform `out_c := a+b` in O(sqrt(n)) depth.
     ///
     /// Assumes:
     ///     Length(a) == Length(b)
@@ -44,8 +44,8 @@ namespace CG {
     ///
     /// Budget:
     ///     Toffoli Count: 3*n + 3*sqrt(n) + O(1)
-    ///     Toffoli Count (uncomputing): 2*n + 3*sqrt(n) + O(1)
-    ///     Reaction Depth: 3*sqrt(n) + 2*lg(n) + O(1)
+    ///     Toffoli Count (uncomputing): 2*n + sqrt(n) + O(1)
+    ///     Reaction Depth: 3*sqrt(n) + lg(n) + O(1)
     ///     Workspace: 2*n + 3*sqrt(n) + O(1)
     ///     where n = Length(a)
     operation init_sum_using_square_root_blocks(
@@ -58,8 +58,8 @@ namespace CG {
 
     /// Budget:
     ///     Toffoli Count: 3*n - 2*b + 5*n/b + O(1)
-    ///     Toffoli Count (uncomputing): 2*n - 2*b + 5*n/b + O(1)
-    ///     Reaction Depth: 3*b + 4*lg(n/b) + O(1)
+    ///     Toffoli Count (uncomputing): 2*n - 2*b + 3*n/b + O(1)
+    ///     Reaction Depth: 3*b + 2*lg(n/b) + O(1)
     ///     Workspace: 2*n + 3*n/b + O(1)
     ///     where n = Length(a)
     ///     where b = block_size
@@ -79,25 +79,25 @@ namespace CG {
                 Qubit[m], 
                 Qubit[n - block_size], 
                 Qubit[n - block_size])) {
-            let mux_blocks_0 = [new Qubit[0]] + Chunks(block_size, mux_0);
-            let mux_blocks_1 = [new Qubit[0]] + Chunks(block_size, mux_1);
+            let case_blocks_0 = [new Qubit[0]] + Chunks(block_size, mux_0);
+            let case_blocks_1 = [new Qubit[0]] + Chunks(block_size, mux_1);
 
-            // Only one low block case. Computed in parallel with the high cases.
+            // Only one low block case. Compute in parallel with the high cases.
             init_sum_using_ripple_carry(
                 LittleEndian(a_blocks[0]),
                 LittleEndian(b_blocks[0]),
                 LittleEndian(c_blocks[0] + [carries_0[0]]));
             within {
-                // Set carry-in.
-                for (k in 1..Length(mux_blocks_1)-1) {
-                    X(mux_blocks_1[k][0]);
+                // Set the carry-in bits of case_blocks_1.
+                for (k in 1..Length(case_blocks_1)-1) {
+                    X(case_blocks_1[k][0]);
                 }
 
-                // Compute carry-in and not-carry-in cases in parallel.
+                // Compute carry-in-cleared and carry-in-set cases in parallel.
                 for (k in 1..m-1) {
                     let stop = k == m - 1 ? -1 | 0;
-                    mutable m0 = mux_blocks_0[k] + [carries_0[k]][...stop];
-                    mutable m1 = mux_blocks_1[k] + [carries_1[k]][...stop];
+                    mutable m0 = case_blocks_0[k] + [carries_0[k]][...stop];
+                    mutable m1 = case_blocks_1[k] + [carries_1[k]][...stop];
                     for (t in [m0, m1]) {
                         init_sum_using_ripple_carry(
                             LittleEndian(a_blocks[k]),
@@ -106,33 +106,47 @@ namespace CG {
                     }
                 }
                 
-                // Convert carries_1 from carry-out-if-carry-in to on-carry-threshold.
+                // Currently carries_0 is local `generate` signals.
+                // Convert carries_1 into local `propagate` signals.
                 for (k in 1..m-1) {
                     CNOT(carries_0[k], carries_1[k]);
                 }
-
-                // Determine propagated carries using carry-lookahead.
-                let gen = carries_0;
-                let prop = carries_1;
-                _prop_gen(prop[1...] + prop[...0], gen);
             } apply {
+                // Determine propagated carries using carry-lookahead strategy.
+                _prop_gen(carries_1[1...] + carries_1[...0], carries_0);
+
+                // Use propagated carries to pick which blocks to keep.
                 for (k in 1..m-1) {
                     init_choose(
                         carries_0[k - 1],
-                        mux_blocks_0[k], 
-                        mux_blocks_1[k], 
+                        case_blocks_0[k],
+                        case_blocks_1[k],
                         c_blocks[k]);
                 }
-            }
 
-            // Uncompute carries_0[0] while keeping the rest of the sum.
-            Adjoint init_full_adder_step(
-                a_blocks[0][block_size-1],
-                b_blocks[0][block_size-1],
-                c_blocks[0][block_size-1],
-                carries_0[0]);
-            CNOT(a_blocks[0][block_size-1], c_blocks[0][block_size-1]);
-            CNOT(b_blocks[0][block_size-1], c_blocks[0][block_size-1]);
+                // Clear propagated carries.
+                for (k in 1..m-1) {
+                    CNOT(a_blocks[k][0], carries_0[k-1]);
+                    CNOT(b_blocks[k][0], carries_0[k-1]);
+                    CNOT(c_blocks[k][0], carries_0[k-1]);
+                }
+
+                // Restore carries_0 (except for carries_0[0] left zero).
+                for (k in 1..m-2) {
+                    let af = Last(a_blocks[k]);
+                    let bf = Last(b_blocks[k]);
+                    let cf = Last(case_blocks_0[k]);
+                    let tf = carries_0[k];
+                    within {
+                        X(cf);
+                        CNOT(af, bf);
+                        CNOT(af, cf);
+                    } apply {
+                        init_and(bf, cf, tf);
+                        CNOT(af, tf);
+                    }
+                }
+            }
         }
     }
 }

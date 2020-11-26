@@ -1,6 +1,6 @@
-﻿namespace CG.Tests {
+﻿namespace BlockAdder.Tests {
     
-    open CG;
+    open BlockAdder;
     open Microsoft.Quantum.Arithmetic;
     open Microsoft.Quantum.Bitwise;
     open Microsoft.Quantum.Canon;
@@ -65,7 +65,8 @@
         FuzzTestInitAddition(init_sum_using_square_root_blocks);
     }
 
-    operation FuzzTestInitAddition(adder: ((LittleEndian, LittleEndian, LittleEndian) => Unit)) : Unit {
+    operation FuzzTestInitAddition(
+            adder: ((LittleEndian, LittleEndian, LittleEndian) => Unit)) : Unit {
         FuzzTestInitAdditionLength(adder, 0, 1);
         FuzzTestInitAdditionLength(adder, 1, 2);
         FuzzTestInitAdditionLength(adder, 2, 2);
@@ -77,7 +78,8 @@
         FuzzTestInitAdditionLength(adder, 129, 5);
     }
 
-    operation FuzzTestInPlaceAddition(adder: ((LittleEndian, LittleEndian) => Unit)) : Unit {
+    operation FuzzTestInPlaceAddition(
+            adder: ((LittleEndian, LittleEndian) => Unit)) : Unit {
         FuzzTestInPlaceAdditionLength(adder, 0, 1);
         FuzzTestInPlaceAdditionLength(adder, 1, 2);
         FuzzTestInPlaceAdditionLength(adder, 2, 2);
@@ -89,7 +91,9 @@
         FuzzTestInPlaceAdditionLength(adder, 129, 5);
     }
 
-    operation FuzzTestInitAdditionLength(adder: ((LittleEndian, LittleEndian, LittleEndian) => Unit), n: Int, attempts: Int) : Unit {
+    operation FuzzTestInitAdditionLength(
+            adder: ((LittleEndian, LittleEndian, LittleEndian) => Unit),
+            n: Int, attempts: Int) : Unit {
         for (k in 1..attempts) {
             let a = DrawRandomBitString(n);
             let b = DrawRandomBitString(n);
@@ -97,7 +101,9 @@
         }
     }
 
-    operation FuzzTestInPlaceAdditionLength(adder: ((LittleEndian, LittleEndian) => Unit), n: Int, attempts: Int) : Unit {
+    operation FuzzTestInPlaceAdditionLength(
+            adder: ((LittleEndian, LittleEndian) => Unit),
+            n: Int, attempts: Int) : Unit {
         for (k in 1..attempts) {
             let a = DrawRandomBitString(n);
             let b = DrawRandomBitString(n);
@@ -105,7 +111,11 @@
         }
     }
 
-    operation CheckInitAdditionCase(adder: ((LittleEndian, LittleEndian, LittleEndian) => Unit), n: Int, a: BigInt, b: BigInt) : Unit {
+    operation CheckInitAdditionCase(
+            adder: ((LittleEndian, LittleEndian, LittleEndian) => Unit),
+            n: Int,
+            a: BigInt,
+            b: BigInt) : Unit {
         let m = 1L <<< n;
         using (data = Qubit[3*n]) {
             let qa = LittleEndian(data[...n-1]);
@@ -127,7 +137,11 @@
         }
     }
 
-    operation CheckInPlaceAdditionCase(adder: ((LittleEndian, LittleEndian) => Unit), n: Int, input: BigInt, target: BigInt) : Unit {
+    operation CheckInPlaceAdditionCase(
+            adder: ((LittleEndian, LittleEndian) => Unit),
+            n: Int,
+            input: BigInt,
+            target: BigInt) : Unit {
         let m = 1L <<< n;
         using (data = Qubit[2*n]) {
             let qinput = LittleEndian(data[...n-1]);

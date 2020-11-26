@@ -1,4 +1,4 @@
-namespace CG {
+namespace BlockAdder {
     open Microsoft.Quantum.Arithmetic;
     open Microsoft.Quantum.Bitwise;
     open Microsoft.Quantum.Canon;
@@ -90,7 +90,7 @@ namespace CG {
             return out_c[end];
         }
         mutable i = (start + end) / 2;
-        for (v in PowerOfTwoness(i)-1..-1..0) {
+        for (v in FactorsOf2(i)-1..-1..0) {
             let m = 1 <<< v;
             if (i + m < Length(out_c)) {
                 set i += m;

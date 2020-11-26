@@ -1,4 +1,4 @@
-namespace CG {
+namespace BlockAdder {
     open Microsoft.Quantum.Arithmetic;
     open Microsoft.Quantum.Bitwise;
     open Microsoft.Quantum.Canon;
@@ -25,25 +25,28 @@ namespace CG {
         let expected_sum = (a + b) % mod;
         Message($"expected_sum={expected_sum}");
 
-        // Perform carry lookahead addition using quantum operations.
-        using (data = Qubit[register_size*2]) {
-            // Prepare inputs.
-            let qa = LittleEndian(data[...register_size-1]);
-            let qb = LittleEndian(data[register_size...]);
-            ApplyXorInPlaceL(a, qa);
-            ApplyXorInPlaceL(b, qb);
+        using ((qa_raw, qb_raw, qsum_raw) = (
+            // Allocate registers.
+                Qubit[register_size],
+                Qubit[register_size],
+                Qubit[register_size])) {
+            let qa = LittleEndian(qa_raw);
+            let qb = LittleEndian(qb_raw);
+            let qsum = LittleEndian(qsum_raw);
 
-            // Compute sum.
-            add_into_using(init_sum_using_square_root_blocks, qa, qb);
+            within {
+                // Prepare inputs.
+                ApplyXorInPlaceL(a, qa);
+                ApplyXorInPlaceL(b, qb);
 
-            // Check the result.
-            let actual_sum = MeasureLE(qb);
-            Message($"  actual_sum={actual_sum}");
-            Message($"       match={actual_sum == expected_sum}");
-
-            // Zero registers before deallocating.
-            ApplyXorInPlaceL(a, qa);
-            ApplyXorInPlaceL(actual_sum, qb);
+                // Compute the sum.
+                init_sum_using_blocks(4, qa, qb, qsum);
+            } apply {
+                // Check the result.
+                let actual_sum = MeasureLE(qsum);
+                Message($"  actual_sum={actual_sum}");
+                Message($"       match={actual_sum == expected_sum}");
+            }
         }
     }
 }

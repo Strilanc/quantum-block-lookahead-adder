@@ -1,4 +1,4 @@
-namespace CG {
+namespace BlockAdder {
     open Microsoft.Quantum.Arithmetic;
     open Microsoft.Quantum.Bitwise;
     open Microsoft.Quantum.Canon;
@@ -8,7 +8,7 @@ namespace CG {
 
     /// Initializes out_sum to equal a+b, in linear depth.
     ///
-    /// To set an input carry, adjust the first qubit of `out_sum` before calling.
+    /// To set an input carry, set the first qubit of `out_sum` before calling.
     /// To get an output carry, increase the length of `out_sum` by 1.
     ///
     /// Assumes:
@@ -36,7 +36,7 @@ namespace CG {
             fail "Length(b!) != Length(a!)";
         }
         if (Length(out_sum!) != n and Length(out_sum!) != n + 1) {
-            fail "Length(out_sum!) != Length(a!) and Length(out_sum!) != Length(a!) + 1";
+            fail "Length(out_sum!) != Length(a!) or Length(a!) + 1";
         }
         for (k in 0..Length(out_sum!)-2) {
             init_full_adder_step(a![k], b![k], out_sum![k], out_sum![k+1]);
@@ -48,7 +48,11 @@ namespace CG {
     }
 
     // Performs LittleEndian([mut_c_to_out_1, out_2]) := a + b + mut_c_to_out_1
-    operation init_full_adder_step(a: Qubit, b: Qubit, mut_c_to_out_1: Qubit, out_2: Qubit) : Unit is Adj {
+    operation init_full_adder_step(
+            a: Qubit,
+            b: Qubit,
+            mut_c_to_out_1: Qubit,
+            out_2: Qubit) : Unit is Adj {
         CNOT(a, b);
         CNOT(a, mut_c_to_out_1);
         init_and(b, mut_c_to_out_1, out_2);

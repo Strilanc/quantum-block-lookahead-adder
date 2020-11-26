@@ -1,6 +1,6 @@
-﻿namespace CG.Tests {
+﻿namespace BlockAdder.Tests {
     
-    open CG;
+    open BlockAdder;
     open Microsoft.Quantum.Arithmetic;
     open Microsoft.Quantum.Bitwise;
     open Microsoft.Quantum.Canon;
@@ -42,18 +42,18 @@
     }
 
     @Test("ToffoliSimulator")
-    operation test_PowerOfTwoness() : Unit {
-        assert(PowerOfTwoness(0) == 0);
-        assert(PowerOfTwoness(1) == 0);
-        assert(PowerOfTwoness(2) == 1);
-        assert(PowerOfTwoness(3) == 0);
-        assert(PowerOfTwoness(4) == 2);
-        assert(PowerOfTwoness(5) == 0);
-        assert(PowerOfTwoness(6) == 1);
-        assert(PowerOfTwoness(7) == 0);
-        assert(PowerOfTwoness(8) == 3);
-        assert(PowerOfTwoness(9) == 0);
-        assert(PowerOfTwoness(10) == 1);
+    operation test_FactorsOf2() : Unit {
+        assert(FactorsOf2(0) == 0);
+        assert(FactorsOf2(1) == 0);
+        assert(FactorsOf2(2) == 1);
+        assert(FactorsOf2(3) == 0);
+        assert(FactorsOf2(4) == 2);
+        assert(FactorsOf2(5) == 0);
+        assert(FactorsOf2(6) == 1);
+        assert(FactorsOf2(7) == 0);
+        assert(FactorsOf2(8) == 3);
+        assert(FactorsOf2(9) == 0);
+        assert(FactorsOf2(10) == 1);
     }
 
     @Test("ToffoliSimulator")

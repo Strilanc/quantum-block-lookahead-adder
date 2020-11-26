@@ -1,4 +1,4 @@
-namespace CG {
+namespace BlockAdder {
     open Microsoft.Quantum.Arithmetic;
     open Microsoft.Quantum.Bitwise;
     open Microsoft.Quantum.Canon;
@@ -77,7 +77,11 @@ namespace CG {
     ///     MeasureLE(out_target) == 0
     ///     Length(out_target) == Length(option0)
     ///     Length(out_target) == Length(option1)
-    operation init_choose(control: Qubit, option0: Qubit[], option1: Qubit[], out_target: Qubit[]) : Unit is Adj {
+    operation init_choose(
+            control: Qubit,
+            option0: Qubit[],
+            option1: Qubit[],
+            out_target: Qubit[]) : Unit is Adj {
         let n = Length(option0);
         for (k in 0..n-1) {
             CNOT(option1[k], option0[k]);
@@ -144,8 +148,13 @@ namespace CG {
         return r;
     }
 
+    // Returns the last item in an array.
+    function Last<'T>(items: 'T[]) : 'T {
+        return items[Length(items) - 1];
+    }
+
     // Determines how many times `n` is divisible by 2.
-    function PowerOfTwoness(n: Int) : Int {
+    function FactorsOf2(n: Int) : Int {
         mutable k = n;
         mutable r = 0;
         while (k != 0 and k % 2 == 0) {

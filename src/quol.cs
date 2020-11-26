@@ -4,7 +4,7 @@ using System;
 using Microsoft.Quantum.Simulation.Core;
 using Microsoft.Quantum.Simulation.Simulators;
 
-namespace CG {
+namespace BlockAdder {
     public partial class is_toffoli_simulator {
         public class Native : is_toffoli_simulator {
             private Func<QVoid, bool> _body;

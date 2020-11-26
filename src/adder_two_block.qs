@@ -1,4 +1,4 @@
-namespace CG {
+namespace BlockAdder {
     open Microsoft.Quantum.Arithmetic;
     open Microsoft.Quantum.Bitwise;
     open Microsoft.Quantum.Canon;
@@ -36,13 +36,16 @@ namespace CG {
         using (c_low_carry = Qubit()) {
             using ((case0, case1) = (Qubit[h2], Qubit[h2])) {
                 // Compute the low case and the two high cases in parallel.
-                init_sum_using_ripple_carry(a_low, b_low, LittleEndian(c_low! + [c_low_carry]));
+                init_sum_using_ripple_carry(
+                    a_low, b_low, LittleEndian(c_low! + [c_low_carry]));
                 within {
                     if (h2 > 0) {
                         X(case1[0]);
                     }
-                    init_sum_using_ripple_carry(a_high, b_high, LittleEndian(case0));
-                    init_sum_using_ripple_carry(a_high, b_high, LittleEndian(case1));
+                    init_sum_using_ripple_carry(
+                        a_high, b_high, LittleEndian(case0));
+                    init_sum_using_ripple_carry(
+                        a_high, b_high, LittleEndian(case1));
                 } apply {
                     // Pick high half output based on carry-out from low half.
                     init_choose(c_low_carry, case0, case1, c_high);
