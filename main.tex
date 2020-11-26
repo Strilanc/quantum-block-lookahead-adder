@@ -89,7 +89,7 @@ showstringspaces=false
 We improve the Toffoli count of low depth quantum adders, and analyze how their spacetime cost reacts to having a limited number of magic state factories.
 We present a block lookahead adder that parallelizes across blocks of bits of size $b$, instead of over all bits.
 The block lookahead adder achieves a Toffoli count of $3n + 5n/b$ for out-of-place addition (vs $4n$ in previous work by Thapliyal et al) and $5n + 10n/b$ for in-place addition (vs $7n$ in previous work by Thapliyal et al).
-The tradeoff is that the reaction depth of these circuits depends linearly on $b$.
+The tradeoff is that the reaction depth of these circuits depends linearly on $b$, and they use additional workspace.
 We estimate the spacetime volume of these adders, and adders from previous work, for various register sizes and factory counts under plausible assumptions for a large scale quantum computer based on the surface code and superconducting qubits.
 \end{abstract}
 
@@ -233,7 +233,7 @@ Here is pseudo-code describing the two block adder:
     let out_low = a_low + b_low carryinto carry_out
     let case0 = a_high + b_high
     let case1 = a_high + b_high + 1
-    # Choose high result using carry_out from low half.
+    # Choose high half using carry_out from low half.
     let out_high = case0 if carry_out else case1
     # Uncompute intermediate values in parallel.
     del carry_out
@@ -307,7 +307,7 @@ This moves the transition from ripple-carry adders to lookahead adders downwards
 In this paper we presented a block lookahead adder with a lower Toffoli count than in previous work, at the cost of a higher depth.
 We implemented these adders in Q\#, which allowed us to verify that they computed the correct result while using at most the stated number of Toffolis and workspace qubits (unfortunately Q\# is not currently able to verify the reaction depth).
 We wrote Python code to estimate the spacetime volume of these adders, and previous adders, and compared them over a range of register sizes and maximum factory counts.
-We found that our adders have lower spacetime volume than previous low depth adders.
+We found that our block lookahead adder has lower spacetime volume than previous low depth adders.
 However, we also demonstrated that ripply carry adders have the best estimated spacetime volumes for register sizes up to 200 and for maximum factory counts up to 50.
 This is a surprising contrast to the classical world, where carry lookahead adders are used even for 8 bit additions \cite{shirriff2020reverseengineer8008}.
 
@@ -317,7 +317,7 @@ For example, Shor's factoring algorithm \cite{shor1994algorithms} does arithmeti
 But, Shor's algorithm is compatible with an integer format that splits the addition problem into (an exponentially good approximation of) independent pieces \cite{gidney2019approximate,gidney2019factor}.
 It's more efficient to apply ripple carry adders to the pieces than to apply lookahead adders to the whole register.
 
-Overall, we believe that a clear conclusion of our numerics is that quantum lookahead adders are rarely the best choice of adder.
+Overall, we believe that a clear conclusion of our numerics is that lookahead adders are rarely the best choice of quantum adder.
 At least, not in the cost model we have chosen.
 There is too much competition from below in the form of ripple carry adders, and from above in the form of other alternatives for parallelization (such as reaction limited computation and carry runways).
 We can only hope that, as theoretical and engineering advances are made, and the projected cost of quantum fault tolerance steadily decreases, hindsight will show that this conclusion was quaintly naive.
@@ -330,8 +330,7 @@ We can only hope that, as theoretical and engineering advances are made, and the
 \section{Corrections in Table 1}
 \label{app:correction}
 
-It was reported in \cite{oonishi2020efficient} that the T count of the T-optimized in-place adder in \cite{thapliyal2020lookahead} was reported incorrectly.
-We double checked this value.
+Because \cite{oonishi2020efficient} states that the T count of the T-optimized in-place adder in \cite{thapliyal2020lookahead} was reported incorrectly, we double checked this value.
 The T-optimized in-place adder is defined in Section V of \cite{thapliyal2020lookahead}, and a T count of $20n$ is given in Table IV (i.e. a Toffoli count of $5n$ by using four T gates per Toffoli).
 
 Here is our breakdown of the relevant operations performed during each step of the T-optimized in-place adder from \cite{thapliyal2020lookahead}.
@@ -361,263 +360,21 @@ We also annotated whether the Toffoli rate in each step is instantaneous, decrea
 
 The total number of Toffoli gates and AND computations in these steps (i.e. the number of Toffoli states required, what we refer to as the Toffoli count) is $7n$.
 The reaction depth is $4 \lg n + O(1)$.
-Maximum workspace occurs during steps 4 and 11, when there are $2n$ ANDs not uncomputed.
-If using T states to perform Toffolis (instead of Toffoli states), there would be an additional $n/2$ work qubits during these steps (because there are up to $n/2$ simultaneous Toffolis occurring).
-In this paper we are assuming Toffoli states are used, not T states, and we account for the cost of applying Toffoli states as part of the cost of distillation, so we don't count the $n/2$ qubits as work qubits.
+Maximum workspace occurs during step 4 and during step 11, when there are $n$ workspace qubits in use.
+If we were using T states to perform Toffolis (instead of Toffoli states), there would be an additional $n/2$ work qubits during these steps to perform the up to $n/2$ simultaneous Toffolis that occur.
+However, we are assuming Toffoli states are used, not T states, and regardless we account for the workspace cost of applying magic states as part of the cost of distillation.
+Therefore we don't count the $n/2$ qubits as work qubits.
 
-Since we are using a different definition of workspace, we also checked the workspace of the T-optimized out-of-place adder in \cite{thapliyal2020lookahead}.
-It was also $2n$, by our definition.
-
-\section{Q\# Source for Carry Lookahead Adder}
-\label{app:carryadder}
-
-The following source code is also available (in a slightly different form) as a Visual Studio Code project in the ancillary folder \texttt{src}.
-If the .net SDK is installed, example code can be run via ``\texttt{dotnet run --project src/adder.csproj}" and the adder code can be unit tested by running ``\texttt{dotnet test test/tests.csproj}".
-
-\begin{qsharp}
-namespace Adder {
-    open Microsoft.Quantum.Arithmetic;
-    open Microsoft.Quantum.Bitwise;
-    open Microsoft.Quantum.Canon;
-    open Microsoft.Quantum.Convert;
-    open Microsoft.Quantum.Intrinsic;
-    open Microsoft.Quantum.Random;
-
-    /// Initializes out_c to equal a+b, in logarithmic depth.
-    ///
-    /// Assumes:
-    ///     Length(a) == Length(b)
-    ///     Length(a) == Length(out_c)
-    ///     MeasureLE(out_c) == 0L
-    ///
-    /// Budget:
-    ///     Toffoli Count: 4*n
-    ///     Toffoli Count (uncomputing): 3*n
-    ///     Reaction Depth: 2*lg(n) + O(1)
-    ///     Additional Workspace: 3*n + O(1)
-    ///     where n = Length(a)
-    operation init_sum_using_carry_lookahead(
-            a: LittleEndian,
-            b: LittleEndian,
-            out_c: LittleEndian) : Unit is Adj {
-        let n = Length(a!);
-        using (unit_carries = Qubit[n]) {
-            within {
-                for (k in 0..(n-1)) {
-                    // Init unit length range carry data.
-                    init_and(a![k], b![k], unit_carries[k]);
-                    // Init unit length range threshold data (into b).
-                    CNOT(a![k], b![k]);
-                }
-            } apply {
-                _init_propagated_carries(unit_carries, b!, out_c!);
-            }
-
-            for (k in 0..(n-1)) {
-                CNOT(a![k], out_c![k]);
-                CNOT(b![k], out_c![k]);
-            }
-        }
-    }
-
-    /// Propagates local carries and thresholds into final carries in logarithmic depth.
-    ///
-    /// Args:
-    ///     unit_carries: Whether or not each bit position produced a carry. The bitwise AND of
-    ///         the two inputs to add.
-    ///     unit_thresholds: Whether or not each bit position will produce a new carry if a
-    ///         carry propagates into that position. The bitwise XOR of the two inputs to add.
-    ///     out_propagated_carries: A zero'd register to write the final fully-propagated
-    ///         carry data into. This value will end up equal to A xor B xor (A + B).
-    ///
-    /// Assumes:
-    ///     Length(unit_carries) == Length(unit_thresholds)
-    ///     Length(unit_carries) == Length(out_propagated_carries)
-    ///     MeasureLE(out_propagated_carries) == 0L
-    ///
-    /// Budget:
-    ///     Additional Workspace: 2*n + O(1)
-    ///     Reaction Depth: 2*lg(n) + O(1)
-    ///     Toffoli Count: 3*n
-    ///     Toffoli Count (uncomputing): 2*n
-    ///     where n = Length(unit_carries)
-    operation _init_propagated_carries(
-            unit_carries: Qubit[],
-            unit_thresholds: Qubit[],
-            out_propagated_carries: Qubit[]) : Unit is Adj {
-        let n = Length(unit_carries);
-        using (centered_thresholds = Qubit[n]) {
-            using (centered_carries = Qubit[n]) {
-                within {
-                    // Note: the uncomputation of this block can be almost entirely overlapped
-                    // with the apply body. This lowers the reaction depth by ~33%.
-                    _init_centered_range_data(
-                        unit_carries,
-                        unit_thresholds,
-                        centered_carries,
-                        centered_thresholds);
-                } apply {
-                    for (t in CeilLg2(n)-1..-1..0) {
-                        let step = 1 <<< t;
-                        for (a in 0..step*2..n-step-1) {
-                            let b = a + step;
-                            let c_a2b = _mux(a, b, unit_carries, centered_carries);
-                            let t_a2b = _mux(a, b, unit_thresholds, centered_thresholds);
-                            init_and(t_a2b, out_propagated_carries[a], out_propagated_carries[b]);
-                            CNOT(c_a2b, out_propagated_carries[b]);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    /// Initializes range data about centered ranges.
-    /// (See definitions in documentation of _mux)
-    ///
-    /// Args:
-    ///     unit_carries: Carry data for unit length ranges.
-    ///     unit_thresholds: Threshold data for unit length ranges.
-    ///     out_centered_carries: Location to store carry data for centered ranges.
-    ///     out_centered_thresholds: Location to store threshold data for centered ranges.
-    ///
-    /// Assumes:
-    ///     Length(unit_carries) == Length(unit_thresholds)
-    ///     Length(unit_carries) == Length(out_centered_carries)
-    ///     Length(unit_carries) == Length(out_centered_thresholds)
-    ///     MeasureLE(out_centered_carries) == 0L
-    ///     MeasureLE(out_centered_thresholds) == 0L
-    ///
-    /// Budget:
-    ///     Additional Workspace: O(1)
-    ///     Reaction Depth: lg(n)
-    ///     Toffoli Count: 2*n
-    ///     Toffoli Count (uncomputing): 0
-    ///     where n = Length(unit_carries)
-    operation _init_centered_range_data(
-            unit_carries: Qubit[],
-            unit_thresholds: Qubit[],
-            out_centered_carries: Qubit[],
-            out_centered_thresholds: Qubit[]) : Unit is Adj {
-        let n = Length(unit_thresholds);
-        let p = CeilLg2(n);
-        for (t in 0..CeilLg2(n)-2) {
-            let step = 1 <<< t;
-            for (a in 0..step * 2..n-step * 2 - 1) {
-                _init_centered_datum_by_fusing(
-                    a,
-                    a + step,
-                    a + step * 2,
-                    unit_carries,
-                    unit_thresholds,
-                    out_centered_carries,
-                    out_centered_thresholds);
-            }
-        }
-    }
-
-    /// Combines range data about `a..b` and `b..c` to create range data about `a..c`.
-    ///
-    /// Args:
-    ///     a: The start of the first range.
-    ///     b: The end of the first range and also the start of the second range.
-    ///     c: The end of the second range.
-    ///     unit_carries: Carry data for unit length ranges.
-    ///     unit_thresholds: Threshold data for unit length ranges.
-    ///     centered_carries: Carry data for centered ranges.
-    ///     centered_thresholds: Threshold data for centered ranges.
-    ///
-    /// Assumes:
-    ///     Length(initial) == Length(mid)
-    ///     a..b is a unit length range or a centered range
-    ///     b..c is a unit length range or a centered range
-    ///     a..c is a centered range
-    ///     (See definitions in documentation of _mux)
-    ///
-    /// Budget:
-    ///     Additional Workspace: O(1)
-    ///     Reaction Depth: 1
-    ///     Toffoli Count: 2
-    ///     Toffoli Count (uncomputing): 0
-    operation _init_centered_datum_by_fusing(
-            a: Int,
-            b: Int,
-            c: Int,
-            unit_carries: Qubit[],
-            unit_thresholds: Qubit[],
-            centered_carries: Qubit[],
-            centered_thresholds: Qubit[]) : Unit is Adj {
-        let c_a2b = _mux(a, b, unit_carries, centered_carries);
-        let t_a2b = _mux(a, b, unit_thresholds, centered_thresholds);
-        let c_b2c = _mux(b, c, unit_carries, centered_carries);
-        let t_b2c = _mux(b, c, unit_thresholds, centered_thresholds);
-        init_and(t_b2c, c_a2b, centered_carries[b]);
-        init_and(t_b2c, t_a2b, centered_thresholds[b]);
-        CNOT(c_b2c, centered_carries[b]);
-    }
-
-    /// Helper method for reading data about a range.
-    ///
-    /// Definitions:
-    ///     Unit length range: A range of the form `a..a+1`.
-    ///     Centered range: A range of the form `m-s..m+s` where `s` is the largest
-    ///         power of 2 that divides `m`. In arrays, data about the centered range
-    ///         `m-s..m+s` is stored at offset `m`.
-    ///
-    /// Args:
-    ///     start: The inclusive start of the range.
-    ///     end: The inclusive end of the range.
-    ///     unit_data: Data for unit length ranges.
-    ///     centered_data: Data for centered ranges.
-    ///
-    /// Assumes:
-    ///     Length(initial) == Length(mid)
-    ///     start..end is a unit length range or a centered range.
-    function _mux(start: Int, end: Int, unit_data: Qubit[], centered_data: Qubit[]) : Qubit {
-        if (end == start + 1) {
-            return unit_data[start];
-        }
-        return centered_data[(start + end) / 2];
-    }
-
-    /// Initializes `target` to equal `a & b`.
-    ///
-    /// Assumes:
-    ///     M(target) == Zero
-    ///
-    /// Budget:
-    ///     Reaction depth: 1
-    ///     Toffoli count: 1
-    ///     Toffoli count (uncomputing): 0
-    ///     Additional Workspace: 0
-    operation init_and(a: Qubit, b: Qubit, target: Qubit) : Unit is Adj {
-        body(...) {
-            CCNOT(a, b, target);
-        }
-        adjoint(...) {
-            // Note: quol.cs overrides for Toffoli simulator.
-            H(target);
-            if (M(target) == One) {
-                CZ(a, b);
-            }
-        }
-    }
-
-    // Returns int(ceil(log_2(n))).
-    function CeilLg2(n: Int) : Int {
-        mutable r = 0;
-        while (1 <<< r < n) {
-            set r += 1;
-        }
-        return r;
-    }
-}
-\end{qsharp}
+We also checked the workspace of the T-optimized out-of-place adder in \cite{thapliyal2020lookahead}.
+It was $2n$, due to the $n$ additional qubits needed to hold the temporary output register.
 
 \section{Q\# Source for Block Lookahead Adder}
 \label{app:blockadder}
 
-Note: this soure code must be in the same project as the source code above.
+The following source code is also available as a Visual Studio Code project in the ancillary files of this paper.
+If the .net SDK is installed, that code can be run via ``\texttt{dotnet run --project src/adder.csproj}" and the adder code can be unit tested by running ``\texttt{dotnet test test/tests.csproj}".
+
+This code has been slightly modified compared to the code in the ancillary files, so that it is self-contained and does not run off the page.
 
 \begin{qsharp}
 namespace Adder {
@@ -630,20 +387,9 @@ namespace Adder {
     open Microsoft.Quantum.Math;
     open Microsoft.Quantum.Random;
 
-    /// Initializes out_c to equal a+b, in blocksize + log(n/block_size) depth.
-    ///
-    /// Assumes:
-    ///     blocksize > 0 or Length(a) == 0
-    ///     Length(a) == Length(b)
-    ///     Length(a) == Length(out_c)
-    ///     MeasureLE(out_c) == 0L
-    ///
-    /// Budget:
-    ///     Toffoli Count: 3*n - 2*b + 5*n/b + O(1)
-    ///     Toffoli Count (uncomputing): 2*n - 2*b + 5*n/b + O(1)
-    ///     Reaction Depth: 3*b + 4*lg(n/b) + O(1)
-    ///     Additional Workspace: 2*n + 5*n/b + O(1)
-    ///     where n = Length(a), b = block_size
+    // Performs `out_c := a + b` in O(block_size + lg(n)) depth.
+    // Assumes Length(a) = Length(b) = Length(out_c).
+    // Assumes out_c is zero'd.
     operation init_sum_using_blocks(
             block_size: Int,
             a: LittleEndian,
@@ -653,6 +399,26 @@ namespace Adder {
             init_sum_using_ripple_carry(a, b, out_c);
         } else {
             _init_sum_using_blocks_helper(block_size, a, b, out_c);
+        }
+    }
+
+    /// Performs `target += input` using a `target := input1 + input2` helper.
+    operation add_into_using(
+            init_sum: ((LittleEndian, LittleEndian, LittleEndian) => Unit is Adj),
+            input: LittleEndian,
+            target: LittleEndian) : Unit is Adj {
+        let n = Length(input!);
+        using (spare = Qubit[n]) {
+            init_sum(input, target, LittleEndian(spare));
+            for (k in 0..n-1) {
+                SWAP(target![k], spare[k]);
+                X(target![k]);
+                X(spare[k]);
+            }
+            Adjoint init_sum(input, target, LittleEndian(spare));
+            for (k in 0..n-1) {
+                X(target![k]);
+            }
         }
     }
 
@@ -667,10 +433,9 @@ namespace Adder {
         let n = Length(a!);
         let m = Length(a_blocks);
 
-        using ((carries_0, carries_1, propagated_carries, mux_0, mux_1) = (
+        using ((carries_0, carries_1, mux_0, mux_1) = (
                 Qubit[m], 
                 Qubit[m], 
-                Qubit[m],
                 Qubit[n - block_size], 
                 Qubit[n - block_size])) {
             let mux_blocks_0 = [new Qubit[0]] + Chunks(block_size, mux_0);
@@ -690,8 +455,8 @@ namespace Adder {
                 // Compute carry-in and not-carry-in cases in parallel.
                 for (k in 1..m-1) {
                     let stop = k == m - 1 ? -1 | 0;
-                    let m0 = mux_blocks_0[k] + [carries_0[k]][...stop];
-                    let m1 = mux_blocks_1[k] + [carries_1[k]][...stop];
+                    mutable m0 = mux_blocks_0[k] + [carries_0[k]][...stop];
+                    mutable m1 = mux_blocks_1[k] + [carries_1[k]][...stop];
                     for (t in [m0, m1]) {
                         init_sum_using_ripple_carry(
                             LittleEndian(a_blocks[k]),
@@ -706,18 +471,20 @@ namespace Adder {
                 }
 
                 // Determine propagated carries using carry-lookahead.
-                _init_propagated_carries(carries_0, carries_1, propagated_carries);
+                let gen = carries_0;
+                let prop = carries_1;
+                _prop_gen(prop[1...] + prop[...0], gen);
             } apply {
                 for (k in 1..m-1) {
                     init_choose(
-                        propagated_carries[k], 
+                        carries_0[k - 1],
                         mux_blocks_0[k], 
                         mux_blocks_1[k], 
                         c_blocks[k]);
                 }
             }
 
-            // Uncompute c_low_carry.
+            // Uncompute carries_0[0] while keeping the rest of the sum.
             Adjoint init_full_adder_step(
                 a_blocks[0][block_size-1],
                 b_blocks[0][block_size-1],
@@ -728,34 +495,14 @@ namespace Adder {
         }
     }
 
-    /// Initializes out_sum to equal a+b, in linear depth.
-    ///
-    /// To set an input carry, adjust the first qubit of `out_sum` before calling.
-    /// To get an output carry, increase the length of `out_sum` by 1.
-    ///
-    /// Assumes:
-    ///     Length(a) == Length(b)
-    ///     Length(a) <= Length(out_sum) <= Length(a) + 1
-    ///     MeasureLE(out_sum[1...]) == 0L
-    ///
-    /// Budget:
-    ///     Additional Workspace: 0
-    ///     Reaction Depth: 2*n
-    ///     Toffoli Count: n
-    ///     Toffoli Count (uncomputing): 0
-    ///     where n = Length(a)
+    // Performs `out_c := a + b` in O(n) depth.
+    // Supports carry-in and carry-out in `out_sum`.
+    // Reference: https://arxiv.org/abs/1709.06648
     operation init_sum_using_ripple_carry(
             a: LittleEndian,
             b: LittleEndian,
             out_sum: LittleEndian) : Unit is Adj {
         let n = Length(a!);
-        if (Length(b!) != n) {
-            fail "Length(b!) != Length(a!)";
-        }
-        if (Length(out_sum!) != n and Length(out_sum!) != n + 1) {
-            fail "Length(out_sum!) != Length(a!)
-                and Length(out_sum!) != Length(a!) + 1";
-        }
         for (k in 0..Length(out_sum!)-2) {
             init_full_adder_step(a![k], b![k], out_sum![k], out_sum![k+1]);
         }
@@ -779,19 +526,109 @@ namespace Adder {
         CNOT(b, mut_c_to_out_1);
     }
 
-    /// Initializes out_target := control ? option1 | option0.
+    // Performs `target := a &&& b`.
+    operation init_and(a: Qubit, b: Qubit, target: Qubit) : Unit is Adj {
+        body(...) {
+            CCNOT(a, b, target);
+        }
+        adjoint(...) {
+            // HACK: when using Toffoli simulator, uncomment this:
+            CCNOT(a, b, target);
+            // HACK: when using resource estimator, uncomment this:
+            // H(target);
+            // if (M(target) == One) {
+            //     CZ(a, b);
+            // }
+        }
+    }
+
+    /// Finds the `propagate` qubit for the given range.
+    function _range_p_storage(ps: Qubit[], range: Range) : Qubit {
+        let start = RangeStart(range);
+        let end = RangeEnd(range);
+        if (end == start + 1) {
+            return ps[start];
+        }
+        return ps[(Length(ps) + start + end) / 2];
+    }
+
+    /// Finds the `generate` qubit for the given range.
+    /// Note qubits are re-used for multiple ranges.
+    function _range_g_storage(out_c: Qubit[], range: Range) : Qubit {
+        let start = RangeStart(range);
+        let end = RangeEnd(range);
+        if (end == start + 1) {
+            return out_c[end];
+        }
+        mutable i = (start + end) / 2;
+        for (v in PowerOfTwoness(i)-1..-1..0) {
+            let m = 1 <<< v;
+            if (i + m < Length(out_c)) {
+                set i += m;
+            }
+        }
+        return out_c[i + 1];
+    }
+
+    /// Propagates local `generate` values into global `generate` values.
+    /// Reference: https://arxiv.org/abs/2004.01826
     ///
-    /// Budget:
-    ///     Toffoli count: n
-    ///     Toffoli count (uncomputing):  0
-    ///     Reaction Depth: n (could be lg(n) if control was duplicated)
-    ///     Workspace: 0
-    ///     where n = length(option1)
-    ///
-    /// Assumes:
-    ///     MeasureLE(out_target) == 0
-    ///     Length(out_target) == Length(option0)
-    ///     Length(out_target) == Length(option1)
+    /// Example:
+    ///       propagates = ...111...1...1.....
+    ///      mut_gs (in) = .....1...1......1..
+    ///     mut_gs (out) = ..1111..11......1..
+    operation _prop_gen(propagates: Qubit[], mut_gs: Qubit[]) : Unit is Adj {
+        let n = Length(propagates);
+        using (workspace = Qubit[n]) {
+            let p = _range_p_storage(propagates + workspace, _);
+            let g = _range_g_storage(mut_gs, _);
+            for (step in PowersOfTwoBelow(n)) {
+                for (i in 0..2*step..n) {
+                    let j = i + step;
+                    let k = j + step;
+                    if (k < n) {
+                        init_and(p(i..j), p(j..k), p(i..k));
+                        CCNOT(g(i..j), p(j..k), g(i..k));
+                    }
+                }
+            }
+            for (step in (PowersOfTwoBelow(n))[...-1...]) {
+                for (i in 0..2*step..n) {
+                    let j = i + step;
+                    let k = j + step;
+                    if (k < n) {
+                        Adjoint init_and(p(i..j), p(j..k), p(i..k));
+                    }
+                    if (j < n) {
+                        CCNOT(g(i-1..i), p(i..j), g(i..j));
+                    }
+                }
+            }
+        }
+    }
+
+    function PowersOfTwoBelow(n: Int) : Int[] {
+        mutable result = new Int[0];
+        mutable k = 1;
+        while (k < n) {
+            set result += [k];
+            set k <<<= 1;
+        }
+        return result;
+    }
+
+    // Determines how many times `n` is divisible by 2.
+    function PowerOfTwoness(n: Int) : Int {
+        mutable k = n;
+        mutable r = 0;
+        while (k != 0 and k % 2 == 0) {
+            set k >>>= 1;
+            set r += 1;
+        }
+        return r;
+    }
+
+    /// Performs `out_target := control ? option1 | option0`.
     operation init_choose(
             control: Qubit,
             option0: Qubit[],
