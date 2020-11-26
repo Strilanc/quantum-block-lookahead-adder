@@ -144,6 +144,7 @@ namespace CG {
         return r;
     }
 
+    // Determines how many times `n` is divisible by 2.
     function PowerOfTwoness(n: Int) : Int {
         mutable k = n;
         mutable r = 0;
