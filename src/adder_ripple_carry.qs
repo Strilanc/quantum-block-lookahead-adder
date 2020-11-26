@@ -6,7 +6,8 @@ namespace BlockAdder {
     open Microsoft.Quantum.Intrinsic;
     open Microsoft.Quantum.Random;
 
-    /// Initializes out_sum to equal a+b, in linear depth.
+    /// Performs `out_sum := a+b` in linear depth.
+    /// Supports carry-in via `out_c[0]` and carry-out via longer `out_c`.
     ///
     /// To set an input carry, set the first qubit of `out_sum` before calling.
     /// To get an output carry, increase the length of `out_sum` by 1.

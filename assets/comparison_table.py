@@ -741,7 +741,7 @@ def main():
             year=2020,
             type="Blocksize=b",
             in_place=True,
-            toffolis=SimpleFormula(n=5, b=-4, n_over_b=9, O_1=True),
+            toffolis=SimpleFormula(n=5, b=-4, n_over_b=8, O_1=True),
             reaction_depth=SimpleFormula(b=6, lg_n_over_b=4, O_1=True),
             workspace=SimpleFormula(n=2, n_over_b=3, O_1=True),
             toffoli_usage=our_block_usage.then(our_block_usage_uncompute),

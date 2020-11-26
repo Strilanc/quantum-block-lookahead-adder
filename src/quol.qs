@@ -55,7 +55,7 @@ namespace BlockAdder {
         }
     }
 
-    // Xors `a` into `target`.
+    // Performs `target ^= a`.
     operation ApplyXorInPlaceL(a: BigInt, target: LittleEndian) : Unit is Adj {
         for (k in 0..Length(target!)-1) {
             if ((a >>> k) % 2L == 1L) {
@@ -64,7 +64,7 @@ namespace BlockAdder {
         }
     }
 
-    /// Initializes out_target := control ? option1 | option0.
+    /// Performs `out_target := control ? option1 | option0`.
     ///
     /// Budget:
     ///     Toffoli count: n
