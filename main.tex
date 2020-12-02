@@ -256,10 +256,10 @@ The tradeoff for the improved Toffoli count is that the reaction depth increases
 The workspace increase looks very large, but it's important to remember that in addition to using more workspace we're requiring fewer magic state factories (to run at a given speed).
 Whether or not these costs balance out is the subject of the next section.
 
-One complication in the construction of the block lookahead adder is that the carry lookahead subroutine overwrites local carry values with propagated carry values (instead of storing the propagated carry values in separate qubits).
-We could easily fix this by uncomputing the carry propagation subroutine, but we don't want to do that because at small block sizes it is the dominant contributor to the reaction depth.
+One complication in the construction of the block lookahead adder is that the carry lookahead subroutine overwrites local carry values with propagated carry values (instead of storing the propagated carry values in separate qubits), but the local carry values are needed when uncomputing other garbage.
+We could easily fix this by uncomputing the carry propagation subroutine, but we don't want to do that because at small block sizes that subroutine is the dominant contributor to the reaction depth.
 Instead, we need to clear the updated carry values, and restore the original carry values, via some alternate means.
-The updated carry values are cleared using the fact that they are equal to the xor of the two input summands and the output sum (at some bit position).
+Each updated carry value is cleared using the fact that they are equal to the xor of the output sum and the two input summands at some bit position.
 The original carry values can then be restored by repeating the last step of the initial ripple carry sums.
 
 So far we have only described an out of place block lookahead adder.
@@ -269,7 +269,7 @@ We implemented the block lookahead adder in Q\#.
 The source code can be found in \app{blockadder}, or in the paper's ancillary files.
 The top level method is \texttt{init\_sum\_using\_blocks} in the file \\\texttt{src/adder\_blocks.qs}.
 For the carry propagation subroutine, we implemented the T-optimized out of place adder described by Thapliyal et al in \cite{thapliyal2020lookahead}.
-The ripple carry adder we implemented is the out of place adder from \cite{gidney2018halving}.
+The ripple carry adder we used is the out of place adder from \cite{gidney2018halving}.
 
 
 \section{Spacetime Volume Comparison}
@@ -280,13 +280,13 @@ Conversely, in a huge quantum computer where space is too cheap to meter, low de
 In this section our goal is to understand the intermediate regime between these two extremes.
 
 Before we discuss our methods, we caution the reader to think carefully when extrapolating our results to other parameter regimes.
-For example, you might expect that using slower physical qubits (e.g. switching from superconducting qubits to ion trap qubits) would increase the need for low depth adders and so this change would favor carry lookahead adders over ripple carry adders.
+For example, you might expect that using slower physical qubits (e.g. switching from superconducting qubits to ion trap qubits) would increase the need for low depth adders to compensate for the slowdown.
 Actually, the reverse occurs.
-Architectures with slower physical qubits have a larger ratio $r$ between the reaction time of the control system and the depth of a magic state factory.
-They can do more control system round trips per factory, meaning reaction-limited computation can feed the outputs of more factories into a single serial circuit.
+Architectures with slower physical qubits have a larger ratio $r$ between the reaction time of the control system and the period of magic state factories.
+They can do more control system round trips per magic state, meaning reaction-limited computation can feed the outputs of more factories into a single serial circuit.
 Basically, slowing down the qubits doesn't slow down the ripple carry adders, because the ripply carry process is mainly limited by the control system's reaction time (until the physical qubits get so slow that even physical measurement is slower than the control system).
 Instead, using slower qubits increases the relative cost of magic state factories.
-So, at least in terms of spacetime volume, slowing down physical qubits favors constructions that use fewer Toffoli gates (such as ripple carry adders).
+So, at least in terms of spacetime volume, slowing down physical qubits actually favors serial constructions that use fewer Toffoli gates (such as ripple carry adders).
 
 To compare adders, we started by looking up or computing their Toffoli count, reaction depth, workspace, and Toffoli consumption rates over time.
 These values are listed in \tbl{comparison}.
@@ -374,7 +374,7 @@ Therefore we don't count the $n/2$ qubits as work qubits.
 We also checked the workspace of the T-optimized out of place adder in \cite{thapliyal2020lookahead}.
 It was $n$, due to $n$ of the workspace qubits from the in place adder being the output register in the out of place case.
 
-\section{Q\# Source for Block Lookahead Adder}
+\section{Q\# Source Code for Block Lookahead Adder}
 \label{app:blockadder}
 
 The following source code is also available as a Visual Studio Code project in the ancillary files of this paper.
@@ -503,12 +503,6 @@ namespace BlockAdder {
             b: LittleEndian,
             out_sum: LittleEndian) : Unit is Adj {
         let n = Length(a!);
-        if (Length(b!) != n) {
-            fail "Length(b!) != Length(a!)";
-        }
-        if (Length(out_sum!) != n and Length(out_sum!) != n + 1) {
-            fail "Length(out_sum!) != Length(a!) or Length(a!) + 1";
-        }
         for (k in 0..Length(out_sum!)-2) {
             init_full_adder_step(a![k], b![k], out_sum![k], out_sum![k+1]);
         }
@@ -518,7 +512,7 @@ namespace BlockAdder {
         }
     }
 
-    // Performs LittleEndian([mut_c_to_out_1, out_2]) := a + b + mut_c_to_out_1
+    // Performs `2*out_2 + out_1 := a + b + c`.
     operation init_full_adder_step(
             a: Qubit,
             b: Qubit,
