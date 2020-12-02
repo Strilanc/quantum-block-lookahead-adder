@@ -1,0 +1,1 @@
+This repository contains the latex code for my paper "Quantum  block  lookahead  adders  and  the  wait  formagic states", as well as supporting Q# and python code implementing the adder and estimating its cost.
