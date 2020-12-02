@@ -39,7 +39,7 @@ namespace BlockAdder {
     ///     Toffoli Count: 4*n
     ///     Toffoli Count (uncomputing): 3*n
     ///     Reaction Depth: 2*lg(n) + O(1)
-    ///     Workspace: n + O(1)
+    ///     Workspace: n
     ///     where n = Length(a)
     ///
     /// Reference:

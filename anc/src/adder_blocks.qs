@@ -43,10 +43,10 @@ namespace BlockAdder {
     ///     MeasureLE(out_c) == 0L
     ///
     /// Budget:
-    ///     Toffoli Count: 3*n + 3*sqrt(n) + O(1)
-    ///     Toffoli Count (uncomputing): 2*n + sqrt(n) + O(1)
+    ///     Toffoli Count: 3*n + 3*sqrt(n)
+    ///     Toffoli Count (uncomputing): 2*n + sqrt(n)
     ///     Reaction Depth: 3*sqrt(n) + lg(n) + O(1)
-    ///     Workspace: 2*n + 3*sqrt(n) + O(1)
+    ///     Workspace: 2*n + 3*sqrt(n)
     ///     where n = Length(a)
     operation init_sum_using_square_root_blocks(
             a: LittleEndian,
