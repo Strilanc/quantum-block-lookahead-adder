@@ -7,12 +7,15 @@
 \usepackage[colorlinks]{hyperref}
 \usepackage[all]{hypcap}
 \usepackage{tikz}
+\usepackage{float}
 \usepackage{listings}
 \usepackage{relsize}
 \usepackage{color,soul}
 \usepackage[utf8]{inputenc}
 \usepackage{capt-of}
 \usepackage[numbers]{natbib}
+\usepackage[T1]{fontenc}  % Without this, underscores lost when copy-pasting output!
+
 
 \usetikzlibrary{decorations.pathreplacing}
 
@@ -61,7 +64,6 @@ showstringspaces=false
 \definecolor{deepgreen}{rgb}{0,0.5,0}
 \newcommand\qsharpstyle{\lstset{
 basicstyle=\ttmq,
-alsoletter={_},
 morekeywords={operation,LittleEndian,let,within,Unit,is,Adj,CNOT,using,Qubit,open,namespace,apply,for,in,function,Int,while,set,return,mutable,H,M,CZ,One,Zero,adjoint,body,CCNOT,Length,Chunks,new,X,Adjoint,fail,if,and,or},
 keywordstyle=\ttbq\color{deepblue},
 emph={measure,__init__},
@@ -69,7 +71,9 @@ emphstyle=\ttbq\color{deepblue},
 stringstyle=\color{deepgreen},
 morecomment=[l]{//},
 commentstyle=\color{deepgreen},
-showstringspaces=false
+showstringspaces=false,
+literate={*}{{\char42}}1
+         {-}{{\char45}}1
 }}
 \lstnewenvironment{qsharp}[1][]
 {\qsharpstyle\lstset{#1}}{}
@@ -124,7 +128,7 @@ Ultimately this suggests that, if we can't dedicate tens of millions of physical
     \label{tbl:comparison}
 \end{table}
 
-\begin{figure}
+\begin{figure}[H]
     \centering
     \minipage{0.5\textwidth}
     \resizebox{\linewidth}{!}{
@@ -143,7 +147,7 @@ Ultimately this suggests that, if we can't dedicate tens of millions of physical
     \label{fig:size_versus_volume}
 \end{figure}
 
-\begin{figure}
+\begin{figure}[H]
     \centering
     \resizebox{\linewidth}{!}{
     \includegraphics{gen/in-place-min-vol.pdf}
@@ -156,7 +160,7 @@ Ultimately this suggests that, if we can't dedicate tens of millions of physical
     \label{fig:minif}
 \end{figure}
 
-\begin{figure}
+\begin{figure}[H]
     \centering
     \resizebox{\linewidth}{!}{
     \includegraphics{gen/out-of-place-min-vol.pdf}
@@ -169,7 +173,7 @@ Ultimately this suggests that, if we can't dedicate tens of millions of physical
     \label{fig:minof}
 \end{figure}
 
-\begin{figure}
+\begin{figure}[H]
     \centering
     \resizebox{\linewidth}{!}{
     \includegraphics{gen/in-place-min-vol-half.pdf}
@@ -250,16 +254,15 @@ These can be fed into the same subroutine used by a carry lookahead adder to mut
 Once the global signals are known, they are used to choose for each block whether to keep the output from the carry-in-cleared or carry-in-set case.
 With that done, the final sum is ready and all garbage is uncomputed.
 
-Parallelizing over blocks in this way, instead of over bits, changes the Toffoli count of out of place addition from $4n$ the $3n + 5n/b$.
+Parallelizing over blocks in this way, instead of over bits, changes the Toffoli count of out of place addition from $4n$ to $3n + 5n/b$.
 This is beneficial as long as $b > 5$ and the number of magic state factories is a bottleneck.
 The tradeoff for the improved Toffoli count is that the reaction depth increases from $2 \lg n + O(1)$ to $3 b + 2 \lg(n/b)$, and the workspace increases from $n$ to $2n + 3n/b$.
-The workspace increase looks very large, but it's important to remember that in addition to using more workspace we're requiring fewer magic state factories (to run at a given speed).
+The workspace increase looks very large, but it's important to remember that despite using more workspace we're requiring fewer magic state factories (to run at a given speed).
 Whether or not these costs balance out is the subject of the next section.
 
 One complication in the construction of the block lookahead adder is that the carry lookahead subroutine overwrites local carry values with propagated carry values (instead of storing the propagated carry values in separate qubits), but the local carry values are needed when uncomputing other garbage.
-We could easily fix this by uncomputing the carry propagation subroutine, but we don't want to do that because at small block sizes that subroutine is the dominant contributor to the reaction depth.
-Instead, we need to clear the updated carry values, and restore the original carry values, via some alternate means.
-Each updated carry value is cleared using the fact that they are equal to the xor of the output sum and the two input summands at some bit position.
+We could fix this by uncomputing the carry propagation subroutine after copying its output to another register, but we don't want to do that because it increases the Toffoli count and also at small block sizes that subroutine is the dominant contributor to the reaction depth.
+Instead, each updated carry value is cleared using the fact that they are equal to the xor of the output sum and the two input summands at some bit position.
 The original carry values can then be restored by repeating the last step of the initial ripple carry sums.
 
 So far we have only described an out of place block lookahead adder.
@@ -295,7 +298,7 @@ The reaction depth is the deepest chain of sequential adaptive measurements that
 The workspace is the number of additional logical qubits needed in the abstract circuit model to run the circuit (i.e. not counting logical qubits used for magic state factories or for storing the input/output).
 
 With the adder data collected, we wrote code to estimate the spacetime volume of an adder given a specified reaction time, factory footprint, and factory period.
-The code can be found in the \texttt{vol} method of the \texttt{Adder} class in the ancillary file \texttt{src/comparison\_table.py}.
+The code can be found in the \texttt{vol} method of the \texttt{Adder} class in the ancillary file \texttt{generate\_figures.py}.
 The code adds together spacetime estimates for the distillation of Toffoli states needed by the circuit, for storage of the circuit's input and output data, for storage of temporary qubits allocated during the execution of the circuit, and for buffering magic states during low-Toffoli-consumption periods in the circuit.
 If an adder needed fewer factories than the maximum, we did not count the unused factories against its spacetime volume (i.e. we assumed they would be used for something else instead).
 
@@ -315,7 +318,7 @@ We implemented these adders in Q\#, which allowed us to verify that they compute
 Unfortunately, Q\# is not currently able to verify the reaction depth.
 We wrote Python code to estimate the spacetime volume of these adders, and previous adders, and compared them over a range of register sizes and maximum factory counts.
 We found that our block lookahead adder has lower spacetime volume than previous low depth adders.
-However, we also demonstrated that ripply carry adders have the best estimated spacetime volumes for register sizes up to 200 and for maximum factory counts up to 50.
+However, we also demonstrated that ripple carry adders have the best estimated spacetime volumes for register sizes up to 200 and for maximum factory counts up to 50.
 This is a surprising contrast to the classical world, where carry lookahead adders are used even for 8 bit additions \cite{shirriff2020reverseengineer8008}.
 
 An important type of adder that we didn't consider in this paper is adders that operate on representations of an integer other than 2s complement, like Draper's frequency-space adder \cite{draper2000qftaddition}.
@@ -337,9 +340,9 @@ We can only hope that, as theoretical and engineering advances are made, and the
 \section{Corrections in Table 1}
 \label{app:correction}
 
-Forewarned by \cite{oonishi2020efficient} states that the resource counts of the T-optimized in place adder in \cite{thapliyal2020lookahead} were reported incorrectly, we double checked the values.
+Forewarned by \cite{oonishi2020efficient} that the resource counts of the T-optimized in place adder in \cite{thapliyal2020lookahead} were reported incorrectly, we double checked the values.
 We counted the gates used during each step and also inspected the behavior of our Q\# implementation of their adder (which we use as a subroutine).
-We report the corrected values in \tbl{comparison}.
+Our results agree with \cite{oonishi2020efficient}, and we report these corrected values in \tbl{comparison}.
 
 \section{Q\# Source Code for Block Lookahead Adder}
 \label{app:blockadder}
